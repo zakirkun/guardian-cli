@@ -126,10 +126,48 @@ class OpenAIProvider(BaseProvider):
             self.logger.error(f"OpenAI sync generation failed: {e}")
             raise
     
+    async def generate_with_usage(
+        self,
+        prompt: str,
+        system_prompt: str,
+        context: Optional[list] = None,
+    ) -> dict:
+        """Generate response and return full token usage metadata."""
+        await self._apply_rate_limit()
+
+        try:
+            messages = []
+            if system_prompt:
+                messages.append(SystemMessage(content=system_prompt))
+            messages.extend(self._format_context(context))
+            messages.append(HumanMessage(content=prompt))
+
+            response = await self.backend.ainvoke(messages)
+
+            # LangChain exposes usage via response_metadata['token_usage']
+            token_usage = response.response_metadata.get("token_usage", {})
+            prompt_tokens     = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens      = token_usage.get("total_tokens", prompt_tokens + completion_tokens)
+
+            return {
+                "response":           response.content,
+                "reasoning":          "",
+                "prompt_tokens":      prompt_tokens,
+                "completion_tokens":  completion_tokens,
+                "total_tokens":       total_tokens,
+                "cost_usd":           self._estimate_cost(prompt_tokens, completion_tokens),
+                "model":              self.model_name,
+                "provider":           "openai",
+            }
+        except Exception as e:
+            self.logger.error(f"OpenAI generate_with_usage failed: {e}")
+            raise
+
     def get_model_name(self) -> str:
         """Get current model name"""
         return self.model_name
-    
+
     def is_available(self) -> bool:
         """Check if provider is available"""
         return LANGCHAIN_AVAILABLE and bool(self.api_key) and self.backend is not None

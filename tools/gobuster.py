@@ -24,37 +24,51 @@ class GobusterTool(BaseTool):
         # Priority: kwargs (workflow) > config > hardcoded defaults
         
         command = ["gobuster", "dir"]
-        
+
         # Target URL
         command.extend(["-u", target])
-        
-        # Wordlist - workflow parameter or config or default
-        wordlist = kwargs.get("wordlist", config.get("wordlist", "/usr/share/wordlists/dirb/common.txt"))
+
+        # Wordlist — prefer SecLists location available in the Docker image
+        wordlist = kwargs.get(
+            "wordlist",
+            config.get(
+                "wordlist",
+                "/usr/share/seclists/Discovery/Web-Content/common.txt",
+            ),
+        )
+        # Fallback chain: SecLists → dirb → gobuster builtin
+        import os
+        fallbacks = [
+            wordlist,
+            "/usr/share/wordlists/dirb/common.txt",
+            "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt",
+        ]
+        for fb in fallbacks:
+            if os.path.exists(fb):
+                wordlist = fb
+                break
         command.extend(["-w", wordlist])
-        
-        # Threads - workflow parameter or config or default
+
+        # Threads
         threads = kwargs.get("threads", config.get("threads", 10))
         command.extend(["-t", str(threads)])
-        
-        # Status codes to look for - workflow parameter or config or default
-        status_codes = kwargs.get("status_codes", config.get("status_codes", "200,204,301,302,307,401,403"))
-        command.extend(["-s", status_codes])
-        
-        # Extensions - workflow parameter or config or empty
+
+        # NOTE: Do NOT set -s (status_codes allowlist) together with -b (blacklist).
+        # gobuster sets -b 404 by default; setting -s at the same time causes an error.
+        # Use -b to add extra codes to blacklist if needed.
+
+        # Extensions
         extensions = kwargs.get("extensions", config.get("extensions", ""))
         if extensions:
             command.extend(["-x", extensions])
-        
-        # Timeout - workflow parameter or config or default
+
+        # Timeout
         timeout = kwargs.get("timeout", config.get("timeout", 10))
         command.extend(["--timeout", f"{timeout}s"])
-        
-        # Quiet mode
+
+        # Quiet mode (suppress progress bar noise)
         command.append("-q")
-        
-        # No progress
-        command.append("--no-progress")
-        
+
         return command
     
     def parse_output(self, output: str) -> Dict[str, Any]:

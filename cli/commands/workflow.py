@@ -134,7 +134,9 @@ def _run_workflow(name: str, target: str, config_file: Path, model: str | None =
     
     try:
         engine = WorkflowEngine(config, target)
-        
+        # Wire Rich console so workflow can stream output and show AI panels
+        engine.set_console(console)
+
         if name == "autonomous":
             results = asyncio.run(engine.run_autonomous())
         else:

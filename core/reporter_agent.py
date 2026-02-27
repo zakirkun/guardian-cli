@@ -12,7 +12,8 @@ from ai.prompt_templates import (
     REPORTER_EXECUTIVE_SUMMARY_PROMPT,
     REPORTER_TECHNICAL_FINDINGS_PROMPT,
     REPORTER_REMEDIATION_PROMPT,
-    REPORTER_AI_TRACE_PROMPT
+    REPORTER_AI_TRACE_PROMPT,
+    REPORTER_TOKEN_COST_SECTION_PROMPT,
 )
 
 
@@ -85,16 +86,30 @@ class ReporterAgent(BaseAgent):
         for f in (critical_findings + high_findings)[:3]:
             top_issues.append(f"- {f.title}")
         
+        # Derive an overall risk rating from finding counts
+        if summary["critical"] > 0:
+            risk_rating = "CRITICAL"
+        elif summary["high"] > 3:
+            risk_rating = "HIGH"
+        elif summary["high"] > 0 or summary["medium"] > 5:
+            risk_rating = "MEDIUM"
+        else:
+            risk_rating = "LOW"
+
         prompt = REPORTER_EXECUTIVE_SUMMARY_PROMPT.format(
             target=self.memory.target,
             scope="Full penetration test",
+            assessment_date=datetime.now().strftime("%Y-%m-%d"),
             duration=self._calculate_duration(),
+            session_id=self.memory.session_id,
             findings_count=len(self.memory.findings),
             critical_count=summary["critical"],
             high_count=summary["high"],
             medium_count=summary["medium"],
             low_count=summary["low"],
-            top_issues="\n".join(top_issues) if top_issues else "No critical issues found"
+            info_count=summary["info"],
+            risk_rating=risk_rating,
+            top_issues="\n".join(top_issues) if top_issues else "No critical issues found",
         )
         
         result = await self.think(prompt, REPORTER_SYSTEM_PROMPT)
@@ -138,9 +153,15 @@ class ReporterAgent(BaseAgent):
         
         workflow = f"Phase: {self.memory.current_phase}\nCompleted Actions: {len(self.memory.completed_actions)}"
         
+        thinking_chain_text = "\n".join(
+            f"  [Step {s.step_number} | {s.agent} | Round {s.round_number}] {s.conclusion[:150]}"
+            for s in self.memory.thinking_chain
+        ) or "No thinking steps recorded"
+
         prompt = REPORTER_AI_TRACE_PROMPT.format(
             ai_decisions=ai_decisions or "No AI decisions recorded",
-            workflow=workflow
+            thinking_chain=thinking_chain_text,
+            workflow=workflow,
         )
         
         result = await self.think(prompt, REPORTER_SYSTEM_PROMPT)

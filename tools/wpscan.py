@@ -24,9 +24,11 @@ class WPScanTool(BaseTool):
         # Target URL
         command.extend(["--url", target])
         
-        # JSON output format
+        # JSON output format (goes to stdout automatically)
         command.extend(["--format", "json"])
-        command.extend(["-o", "-"])  # Output to stdout
+
+        # Skip update check (avoids stall on first run)
+        command.append("--no-update")
         
         # API token for vulnerability database
         api_token = config.get("api_token", "")

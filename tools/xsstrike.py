@@ -5,28 +5,52 @@ import re
 
 class XSStrikeTool(BaseTool):
     """Wrapper for XSStrike - Advanced XSS Detection Suite"""
-    
+
+    # Common installation paths in Docker / Kali images
+    _SCRIPT_PATHS = [
+        "/opt/xsstrike/xsstrike.py",
+        "/usr/share/xsstrike/xsstrike.py",
+        "/opt/XSStrike/xsstrike.py",
+    ]
+
+    def __init__(self, config):
+        import shutil, os
+        # Find script path — prefer python3 invocation over a shim binary
+        self._script = None
+        for p in self._SCRIPT_PATHS:
+            if os.path.exists(p):
+                self._script = p
+                break
+        # Set tool_name BEFORE calling super so is_available check uses it
+        self.tool_name = "xsstrike"
+        super().__init__(config)
+
+    def _check_installation(self) -> bool:
+        import shutil, os
+        # Available if either the script exists or the binary is in PATH
+        return any(os.path.exists(p) for p in self._SCRIPT_PATHS) or bool(shutil.which("xsstrike"))
+
     def get_command(self, target: str, **kwargs) -> List[str]:
-        # XSStrike is often a python script, not always in path
-        # Assuming it's installed as 'xsstrike' or runnable python module
-        cmd = ["xsstrike", "-u", target]
-        
+        import shutil
+        # Build invocation: prefer python3 script, fall back to binary
+        if self._script:
+            cmd = ["python3", self._script, "-u", target]
+        else:
+            cmd = ["xsstrike", "-u", target]
+
         if kwargs.get("crawl", False):
             cmd.append("--crawl")
-            
+
         if kwargs.get("level"):
             cmd.extend(["-l", str(kwargs["level"])])
-            
+
         if kwargs.get("headers"):
             cmd.extend(["--headers", kwargs["headers"]])
-            
-        # JSON output support in XSStrike is limited/experimental in some versions
-        # We'll rely on parsing stdout or --json if available in the specific installed version
-        # For this wrapper, we'll try to use --json if supported, otherwise parse stdout
-        if kwargs.get("json_output", True):
-             cmd.append("--json")
-             
-        # Add timeout
+
+        # --json is supported in XSStrike v3.1.5
+        if kwargs.get("json_output", False):
+            cmd.append("--json")
+
         if kwargs.get("timeout"):
             cmd.extend(["--timeout", str(kwargs["timeout"])])
 

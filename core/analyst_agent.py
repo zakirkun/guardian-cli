@@ -57,11 +57,21 @@ class AnalystAgent(BaseAgent):
         if len(output) > 5000:
             output = output[:5000] + "\n... (truncated)"
         
+        # Gather memory context for richer analysis
+        prior_findings_text = "\n".join(
+            f"  [{f.severity.upper()}] {f.title}"
+            for f in self.memory.findings[-10:]  # last 10 to keep prompt bounded
+        ) or "None yet"
+        technologies_text = ", ".join(self.memory.context.get("technologies", [])) or "Unknown"
+
         prompt = ANALYST_INTERPRET_PROMPT.format(
             tool=tool,
             target=target,
             command=command,
-            output=output
+            execution_id=execution_id or "N/A",
+            output=output,
+            prior_findings=prior_findings_text,
+            technologies=technologies_text,
         )
         
         result = await self.think(prompt, ANALYST_SYSTEM_PROMPT)
@@ -107,7 +117,7 @@ class AnalystAgent(BaseAgent):
         
         prompt = ANALYST_CORRELATION_PROMPT.format(
             target=self.memory.target,
-            tool_results=tool_results
+            tool_results=tool_results,
         )
         
         result = await self.think(prompt, ANALYST_SYSTEM_PROMPT)
@@ -132,8 +142,8 @@ class AnalystAgent(BaseAgent):
             tool=finding.tool,
             severity=finding.severity,
             description=finding.description,
-            evidence=finding.evidence[:500],  # Truncate
-            context=context
+            evidence=finding.evidence[:500],
+            context=context,
         )
         
         result = await self.think(prompt, ANALYST_SYSTEM_PROMPT)

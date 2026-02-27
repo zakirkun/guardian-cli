@@ -37,9 +37,14 @@ class PlannerAgent(BaseAgent):
         prompt = PLANNER_DECISION_PROMPT.format(
             phase=self.memory.current_phase,
             target=self.memory.target,
+            session_id=self.memory.session_id,
             completed_actions="\n".join(f"- {a}" for a in self.memory.completed_actions) or "None",
             findings=findings_summary,
-            available_actions=available_actions
+            attack_surface="\n".join(f"- {e}" for e in self.memory.attack_surface) or "None discovered",
+            technologies=", ".join(self.memory.context.get("technologies", [])) or "Unknown",
+            threat_model=self.memory.threat_model[:600] if self.memory.threat_model else "Not yet built",
+            prior_reasoning_chain=self.memory.get_recent_thinking(3),
+            available_actions=available_actions,
         )
         
         # Get AI decision
@@ -64,7 +69,9 @@ class PlannerAgent(BaseAgent):
             target=self.memory.target,
             phase=self.memory.current_phase,
             findings_summary=findings_summary,
-            tools_executed=tools_executed or "None"
+            tools_executed=tools_executed or "None",
+            decision_count=len(self.memory.ai_decisions),
+            thinking_steps=len(self.memory.thinking_chain),
         )
         
         result = await self.think(prompt, PLANNER_SYSTEM_PROMPT)

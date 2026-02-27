@@ -8,6 +8,11 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.text import Text
+
 from core.agent import BaseAgent
 from core.planner import PlannerAgent
 from core.memory import PentestMemory, ToolExecution, Finding
@@ -44,6 +49,13 @@ class WorkflowEngine:
         self.is_running = False
         self.current_step = 0
         self.max_steps = config.get("workflows", {}).get("max_steps", 20)
+
+        # Rich console for real-time display (set by CLI layer)
+        self._console: Optional[Console] = None
+
+    def set_console(self, console: Console):
+        """Wire a Rich console for streaming output and AI panel display."""
+        self._console = console
     
     async def run_workflow(self, workflow_name: str) -> Dict[str, Any]:
         """
@@ -162,30 +174,54 @@ class WorkflowEngine:
         self.is_running = False
     
     async def _execute_step(self, step: Dict[str, Any]):
-        """Execute a workflow step"""
+        """Execute a workflow step with streaming output and AI thinking display."""
         step_type = step.get("type", "tool")
-        
+        con = self._console  # may be None — all prints are guarded
+
+        # ── TOOL step ────────────────────────────────────────────────────────
         if step_type == "tool":
-            # Use Tool Agent to select and execute tool
             tool_name = step["tool"]
-            objective = step.get("objective", f"Execute {tool_name}")
-            
+            objective  = step.get("objective", f"Execute {tool_name}")
+
+            if con:
+                con.print(Rule(f"[bold cyan]TOOL  {tool_name.upper()}[/bold cyan]", style="cyan"))
+                con.print(f"  [dim]Objective:[/dim] {objective}")
+                con.print(f"  [dim]Target   :[/dim] [yellow]{self.target}[/yellow]\n")
+
             self.logger.info(f"Tool Agent selecting tool: {tool_name}")
-            
-            # Tool Agent executes the tool
+
+            # Build a line-by-line stream callback for Rich
+            def _stream(line: str):
+                if con and line.strip():
+                    try:
+                        con.print(line, markup=True, highlight=False)
+                    except Exception:
+                        con.print(line, markup=False)
+
             result = await self.tool_agent.execute_tool(
                 tool_name=tool_name,
-                target=self.target,
-                **step.get("parameters", {})
+                target=self.target,          # always the exact CLI target
+                stream_callback=_stream,
+                **step.get("parameters", {}),
             )
-            
-            if result.get("success"):
-                # Generate unique execution ID for this tool run
+
+            if result.get("skipped"):
+                if con:
+                    con.print(
+                        Panel(
+                            f"[yellow]Tool [bold]{tool_name}[/bold] is not installed — step skipped.[/yellow]\n"
+                            f"Install it and re-run, or remove this step from the workflow.",
+                            title="[yellow]SKIPPED[/yellow]",
+                            border_style="yellow",
+                        )
+                    )
+                self.logger.warning(f"Step '{step['name']}' skipped — tool {tool_name} not available")
+
+            elif result.get("success"):
+                # Record execution with unique ID
                 import time
                 execution_id = f"{tool_name}_{int(time.time() * 1000)}"
-                
-                # Store execution with ID and full output
-                from core.memory import ToolExecution
+
                 execution = ToolExecution(
                     id=execution_id,
                     tool=tool_name,
@@ -193,53 +229,90 @@ class WorkflowEngine:
                     target=self.target,
                     timestamp=datetime.now().isoformat(),
                     exit_code=result.get("exit_code", 0),
-                    output=result.get("raw_output", ""),  # Store the FULL raw output
-                    duration=result.get("duration", 0)
+                    output=result.get("raw_output", ""),
+                    duration=result.get("duration", 0),
                 )
                 self.memory.add_tool_execution(execution)
-                
-                # Use Analyst Agent to interpret results and link to execution
+
+                # Analyst AI thinking panel
                 self.logger.info("Analyst Agent analyzing results...")
+                if con:
+                    con.print(Rule("[bold green]AI ANALYST[/bold green]", style="green"))
+
                 analysis = await self.analyst.interpret_output(
                     tool=tool_name,
                     target=self.target,
                     command=result.get("command", ""),
                     output=result.get("raw_output", ""),
-                    execution_id=execution_id  # Pass execution ID to analyst
+                    execution_id=execution_id,
                 )
-                
+
+                if con and analysis.get("reasoning"):
+                    con.print(
+                        Panel(
+                            Text(analysis["reasoning"][:600], style="dim"),
+                            title="[cyan]Analyst Reasoning[/cyan]",
+                            border_style="cyan",
+                            expand=False,
+                        )
+                    )
+
                 self.logger.info(f"Found {len(analysis['findings'])} findings from {tool_name}")
+                if con:
+                    colour = "red" if analysis['findings'] else "green"
+                    con.print(f"  [{colour}]Findings: {len(analysis['findings'])}[/{colour}]\n")
+
             else:
-                self.logger.warning(f"Tool execution failed: {result.get('error')}")
-            
+                err = result.get("error", "unknown error")
+                self.logger.warning(f"Tool execution failed: {err}")
+                if con:
+                    con.print(f"  [red]Tool failed:[/red] {err}\n")
+
+        # ── ANALYSIS step ────────────────────────────────────────────────────
         elif step_type == "analysis":
-            # AI analysis step
+            if con:
+                con.print(Rule("[bold magenta]AI CORRELATION ANALYSIS[/bold magenta]", style="magenta"))
+
             self.logger.info("Running correlation analysis...")
             analysis = await self.analyst.correlate_findings()
             self.logger.info("Correlation analysis complete")
-            
+
+            if con and analysis.get("analysis"):
+                # Show a trimmed preview
+                preview = analysis["analysis"][:800]
+                con.print(
+                    Panel(
+                        Text(preview, style="white"),
+                        title="[magenta]Correlation Result[/magenta]",
+                        border_style="magenta",
+                        expand=False,
+                    )
+                )
+
+        # ── REPORT step ──────────────────────────────────────────────────────
         elif step_type == "report":
-            # Generate report using config format as default
             config_format = self.config.get("output", {}).get("format", "markdown")
-            report_format = step.get("format", config_format)  # Use config default if step doesn't specify
-            
+            report_format = step.get("format", config_format)
+
+            if con:
+                con.print(Rule(f"[bold blue]AI REPORTER — {report_format.upper()}[/bold blue]", style="blue"))
+
             self.logger.info(f"Generating {report_format} report...")
             report = await self.reporter.execute(format=report_format)
-            
-            # Save report
+
             output_dir = Path(self.config.get("output", {}).get("save_path", "./reports"))
             output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Use proper file extension
             extension_map = {"markdown": "md", "html": "html", "json": "json"}
             extension = extension_map.get(report_format, "md")
             report_file = output_dir / f"report_{self.memory.session_id}.{extension}"
-            
-            with open(report_file, 'w', encoding='utf-8') as f:
+
+            with open(report_file, "w", encoding="utf-8") as f:
                 f.write(report["content"])
-            
+
             self.logger.info(f"Report saved to: {report_file}")
-        
+            if con:
+                con.print(f"  [green]Report saved:[/green] [link={report_file}]{report_file}[/link]\n")
+
         self.memory.mark_action_complete(step["name"])
     
     async def _execute_ai_decision(self, decision: Dict[str, Any]):

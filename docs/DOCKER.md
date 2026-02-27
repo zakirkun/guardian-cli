@@ -7,7 +7,7 @@ Guardian CLI can be deployed using Docker for easy setup and consistent environm
 ### 1. Build the Docker Image
 
 ```bash
-docker-compose build
+docker compose build
 ```
 
 This will create a Docker image with all security tools installed (~1.5GB).
@@ -24,16 +24,16 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 
 ```bash
 # List available workflows
-docker-compose run --rm guardian workflow list
+docker compose run --rm guardian workflow list
 
 # Run reconnaissance
-docker-compose run --rm guardian recon --domain example.com
+docker compose run --rm guardian recon --domain example.com
 
 # Run web application scan  
-docker-compose run --rm guardian workflow run --name web --target https://example.com
+docker compose run --rm guardian workflow run --name web --target https://example.com
 
 # Get help
-docker-compose run --rm guardian --help
+docker compose run --rm guardian --help
 ```
 
 ---
@@ -44,8 +44,8 @@ docker-compose run --rm guardian --help
 
 ```bash
 # Build and run
-docker-compose build
-docker-compose run --rm guardian recon --domain example.com
+docker compose build
+docker compose run --rm guardian recon --domain example.com
 ```
 
 ### Method 2: Docker CLI
@@ -99,7 +99,7 @@ Reports generated inside the container are automatically saved to your local `./
 
 ```bash
 # Run a scan
-docker-compose run --rm guardian recon --domain example.com
+docker compose run --rm guardian recon --domain example.com
 
 # Reports are saved locally
 ls -la ./reports/
@@ -140,31 +140,31 @@ docker run --rm \
 ### 1. Quick Reconnaissance
 
 ```bash
-docker-compose run --rm guardian recon --domain example.com
+docker compose run --rm guardian recon --domain example.com
 ```
 
 ### 2. Web Application Scan
 
 ```bash
-docker-compose run --rm guardian workflow run --name web --target https://example.com
+docker compose run --rm guardian workflow run --name web --target https://example.com
 ```
 
 ### 3. Network Assessment
 
 ```bash
-docker-compose run --rm guardian workflow run --name network --target 192.168.1.0/24
+docker compose run --rm guardian workflow run --name network --target 192.168.1.0/24
 ```
 
 ### 4. Generate Report
 
 ```bash
-docker-compose run --rm guardian report --session 20251222_120000 --format html
+docker compose run --rm guardian report --session 20251222_120000 --format html
 ```
 
 ### 5. Interactive Shell
 
 ```bash
-docker-compose run --rm guardian bash
+docker compose run --rm guardian bash
 ```
 
 ---
@@ -173,7 +173,7 @@ docker-compose run --rm guardian bash
 
 ### Custom Docker Compose
 
-Create `docker-compose.override.yml` for custom settings:
+Create `docker compose.override.yml` for custom settings:
 
 ```yaml
 version: '3.8'
@@ -237,7 +237,7 @@ chmod 777 -R ./reports ./logs
 
 **Solution**: Verify tool installation in container:
 ```bash
-docker-compose run --rm guardian bash
+docker compose run --rm guardian bash
 which nmap httpx nuclei
 ```
 
@@ -246,7 +246,7 @@ which nmap httpx nuclei
 **Solution**: Check API key and rate limits:
 ```bash
 # Verify API key is set
-docker-compose run --rm guardian bash -c 'echo $GOOGLE_API_KEY'
+docker compose run --rm guardian bash -c 'echo $GOOGLE_API_KEY'
 ```
 
 ---
@@ -261,7 +261,7 @@ The multi-stage build already optimizes size. Current image size: ~1.5GB
 
 Use BuildKit for faster builds:
 ```bash
-DOCKER_BUILDKIT=1 docker-compose build
+DOCKER_BUILDKIT=1 docker compose build
 ```
 
 ### Cache Dependencies
@@ -269,7 +269,7 @@ DOCKER_BUILDKIT=1 docker-compose build
 Docker layers cache dependencies automatically. Only rebuild when needed:
 ```bash
 # Rebuild only if Dockerfile changed
-docker-compose build --no-cache
+docker compose build --no-cache
 ```
 
 ---
@@ -303,7 +303,7 @@ echo "your_api_key" | docker secret create gemini_key -
 ### Remove Containers
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Remove Images
@@ -338,8 +338,8 @@ docker builder prune -a
 ## Support
 
 For Docker-specific issues:
-- Check logs: `docker-compose logs`
-- Verify build: `docker-compose config`
-- Test tools: `docker-compose run --rm guardian bash`
+- Check logs: `docker compose logs`
+- Verify build: `docker compose config`
+- Test tools: `docker compose run --rm guardian bash`
 
 For Guardian issues, see main [README.md](../README.md).

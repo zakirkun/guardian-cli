@@ -26,11 +26,11 @@ class HttpxTool(BaseTool):
         command = ["httpx"]
         
         # JSON output for easy parsing
-        command.extend(["-j"])
+        command.extend(["-json"])
         
-        # Threads - workflow parameter or config or default
+        # Concurrency - httpx uses -concurrency not -threads
         threads = kwargs.get("threads", config.get("threads", 50))
-        command.extend(["-threads", str(threads)])
+        command.extend(["-concurrency", str(threads)])
         
         # Timeout - workflow parameter or config or default
         timeout = kwargs.get("timeout", config.get("timeout", 10))

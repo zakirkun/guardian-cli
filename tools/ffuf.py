@@ -27,23 +27,39 @@ class FFufTool(BaseTool):
         
         # Target URL with FUZZ keyword
         if "FUZZ" not in target:
-            # If no FUZZ keyword, append it to the end
             target = f"{target}/FUZZ"
         command.extend(["-u", target])
-        
-        # Wordlist (required) - workflow parameter or config or default
-        wordlist = kwargs.get("wordlist", config.get("wordlist", "/usr/share/wordlists/dirb/common.txt"))
+
+        # Wordlist — fallback chain to find one that exists in the container
+        import os
+        default_wordlist = kwargs.get("wordlist", config.get("wordlist", ""))
+        candidates = [
+            default_wordlist,
+            "/usr/share/seclists/Discovery/Web-Content/common.txt",
+            "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt",
+            "/usr/share/wordlists/dirb/common.txt",
+            "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt",
+        ]
+        wordlist = next((c for c in candidates if c and os.path.exists(c)), None)
+        if not wordlist:
+            # Last resort: write a tiny built-in list
+            wordlist = "/tmp/guardian_ffuf_wordlist.txt"
+            with open(wordlist, "w") as wf:
+                wf.write("\n".join([
+                    "admin", "login", "wp-admin", "api", "config", "backup",
+                    ".env", "robots.txt", "sitemap.xml", "index.php", "phpinfo.php",
+                    "wp-login.php", "xmlrpc.php", "readme.html", ".git", ".gitignore",
+                ]))
         command.extend(["-w", wordlist])
-        
-        # JSON output for parsing
-        command.extend(["-of", "json"])
-        command.extend(["-o", "-"])  # Output to stdout
-        
-        # Threads - workflow parameter or config or default
+
+        # Use -json for inline JSON output (no extra -o file needed)
+        command.extend(["-json"])
+
+        # Threads
         threads = kwargs.get("threads", config.get("threads", 40))
         command.extend(["-t", str(threads)])
-        
-        # Timeout - workflow parameter or config or default
+
+        # Timeout
         timeout = kwargs.get("timeout", config.get("timeout", 10))
         command.extend(["-timeout", str(timeout)])
         

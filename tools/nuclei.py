@@ -43,18 +43,23 @@ class NucleiTool(BaseTool):
             else:
                 command.extend(["-severity", severities])
         
-        # Templates path - workflow parameter or config or None
+        # Templates path
+        # subprocess does NOT expand '~' — must do it explicitly here
         templates_path = kwargs.get("templates_path", config.get("templates_path"))
         if templates_path:
-            command.extend(["-t", templates_path])
-        
+            import os
+            expanded = os.path.expanduser(str(templates_path))
+            if os.path.exists(expanded):
+                command.extend(["-t", expanded])
+            # If path does not exist, omit -t so nuclei uses its own default
+
         # Silent mode
         command.append("-silent")
-        
-        # Rate limit - workflow parameter or config or default
+
+        # Rate limit
         rate_limit = kwargs.get("rate_limit", config.get("rate_limit", 150))
         command.extend(["-rate-limit", str(rate_limit)])
-        
+
         return command
     
     def parse_output(self, output: str) -> Dict[str, Any]:

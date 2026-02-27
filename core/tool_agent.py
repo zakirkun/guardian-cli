@@ -69,13 +69,33 @@ class ToolAgent(BaseAgent):
         # Get context from memory
         context = self.memory.get_context_for_ai()
         
+        # Gather constraint config
+        safe_mode   = self.config.get("pentest", {}).get("safe_mode", True)
+        rate_limit  = self.config.get("ai", {}).get("rate_limit", 60)
+        timeout     = self.config.get("pentest", {}).get("tool_timeout", 300)
+        stealth     = kwargs.get("stealth", False)
+
+        # Build installed-tools list from what's registered
+        installed_tools_str = ", ".join(sorted(self.available_tools.keys()))
+
+        # Summarise prior tool outputs (tool names already run)
+        prior_tools_run = ", ".join(
+            t.tool for t in self.memory.tool_executions
+        ) or "None yet"
+
         # Ask AI to select tool
         prompt = TOOL_SELECTION_PROMPT.format(
             objective=objective,
             target=target,
             target_type=target_type,
             phase=self.memory.current_phase,
-            context=context
+            context=context,
+            installed_tools=installed_tools_str,
+            prior_tool_outputs=prior_tools_run,
+            safe_mode=safe_mode,
+            stealth=stealth,
+            rate_limit=rate_limit,
+            timeout=timeout,
         )
         
         result = await self.think(prompt, TOOL_SELECTOR_SYSTEM_PROMPT)
@@ -102,13 +122,20 @@ class ToolAgent(BaseAgent):
         safe_mode = self.config.get("pentest", {}).get("safe_mode", True)
         timeout = self.config.get("pentest", {}).get("tool_timeout", 300)
         
+        target_type = self._detect_target_type(target)
+        rate_limit  = self.config.get("ai", {}).get("rate_limit", 60)
+        context     = self.memory.get_context_for_ai()
+
         prompt = TOOL_PARAMETERS_PROMPT.format(
             tool=tool_name,
             objective=objective,
             target=target,
+            target_type=target_type,
+            context=context,
             safe_mode=safe_mode,
-            stealth=False,  # Could be configurable
-            timeout=timeout
+            stealth=False,
+            timeout=timeout,
+            rate_limit=rate_limit,
         )
         
         result = await self.think(prompt, TOOL_SELECTOR_SYSTEM_PROMPT)
@@ -118,58 +145,73 @@ class ToolAgent(BaseAgent):
             "justification": result["reasoning"]
         }
     
-    async def execute_tool(self, tool_name: str, target: str, **kwargs) -> Dict[str, Any]:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        target: str,
+        stream_callback=None,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """
-        Execute a selected tool
-        
+        Execute a selected tool against `target`.
+
+        Args:
+            tool_name:       Name of the registered tool.
+            target:          Exact target as supplied by the user.
+            stream_callback: Optional callable(line: str) for real-time output.
+
         Returns:
-            Tool execution results
+            Result dict with 'success', 'raw_output', etc.
+            Never raises — returns success=False on any failure.
         """
         if tool_name not in self.available_tools:
-            raise ValueError(f"Unknown tool: {tool_name}")
-        
+            self.logger.warning(f"Unknown tool requested: {tool_name} — skipping")
+            return {"success": False, "skipped": True, "tool": tool_name,
+                    "error": f"Tool '{tool_name}' not registered", "raw_output": ""}
+
         tool = self.available_tools[tool_name]
-        
+
+        # is_available is checked inside base_tool.execute() and returns a
+        # skipped result — but we also short-circuit here for speed.
         if not tool.is_available:
-            self.logger.warning(f"Tool {tool_name} is not installed")
-            return {
-                "success": False,
-                "error": f"Tool {tool_name} not available",
-                "tool": tool_name
-            }
-        
+            self.logger.warning(f"Tool {tool_name} is not installed — skipping")
+            return {"success": False, "skipped": True, "tool": tool_name,
+                    "error": f"Tool '{tool_name}' not installed", "raw_output": ""}
+
         try:
-            # Execute tool
-            result = await tool.execute(target, **kwargs)
-            
-            # Record execution in memory
-            from core.memory import ToolExecution
-            execution = ToolExecution(
-                tool=tool_name,
-                command=result["command"],
-                target=target,
-                timestamp=result.get("timestamp", ""),
-                exit_code=result["exit_code"],
-                output=result["raw_output"],
-                duration=result["duration"]
-            )
-            self.memory.add_tool_execution(execution)
-            
+            result = await tool.execute(target, stream_callback=stream_callback, **kwargs)
+
+            if result.get("success"):
+                # Record successful execution in memory
+                from core.memory import ToolExecution
+                execution = ToolExecution(
+                    tool=tool_name,
+                    command=result.get("command", ""),
+                    target=target,
+                    timestamp=result.get("timestamp", ""),
+                    exit_code=result.get("exit_code", 0),
+                    output=result.get("raw_output", ""),
+                    duration=result.get("duration", 0.0),
+                )
+                self.memory.add_tool_execution(execution)
+
             return {
-                "success": True,
-                "tool": tool_name,
-                "parsed": result["parsed"],
-                "raw_output": result["raw_output"],
-                "duration": result["duration"]
+                "success":    result.get("success", False),
+                "skipped":    result.get("skipped", False),
+                "tool":       tool_name,
+                "command":    result.get("command", ""),
+                "parsed":     result.get("parsed", {}),
+                "raw_output": result.get("raw_output", ""),
+                "duration":   result.get("duration", 0.0),
+                "exit_code":  result.get("exit_code", -1),
+                "error":      result.get("error"),
             }
-            
+
         except Exception as e:
-            self.logger.error(f"Tool execution failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "tool": tool_name
-            }
+            self.logger.error(f"Unexpected error in execute_tool({tool_name}): {e}")
+            return {"success": False, "skipped": False, "tool": tool_name,
+                    "error": str(e), "raw_output": ""}
+
     
     def _detect_target_type(self, target: str) -> str:
         """Detect if target is IP, domain, or URL"""

@@ -32,6 +32,27 @@ ai:
   timeout: 60
   rate_limit: 2
 
+  # Model Pricing (USD per 1 million tokens)
+  # Update these values whenever a provider changes their pricing.
+  # Format:  <model-name>: {prompt: <cost>, completion: <cost>}
+  pricing:
+    # OpenAI
+    gpt-4o:               { prompt: 5.00,  completion: 15.00 }
+    gpt-4o-mini:          { prompt: 0.15,  completion: 0.60  }
+    gpt-4-turbo:          { prompt: 10.00, completion: 30.00 }
+    gpt-3.5-turbo:        { prompt: 0.50,  completion: 1.50  }
+    # Anthropic
+    claude-3-5-sonnet-20241022: { prompt: 3.00,  completion: 15.00 }
+    claude-3-opus-20240229:     { prompt: 15.00, completion: 75.00 }
+    claude-3-haiku-20240307:    { prompt: 0.25,  completion: 1.25  }
+    # Google Gemini
+    gemini-2.5-pro:       { prompt: 1.25,  completion: 5.00  }
+    gemini-2.0-flash:     { prompt: 0.10,  completion: 0.40  }
+    gemini-1.5-pro:       { prompt: 3.50,  completion: 10.50 }
+    # OpenRouter (model names as returned by the API)
+    anthropic/claude-3.5-sonnet: { prompt: 3.00, completion: 15.00 }
+    openai/gpt-4o:               { prompt: 5.00, completion: 15.00 }
+
 
 # Penetration Testing Settings
 pentest:

@@ -12,12 +12,20 @@ class TestSSLTool(BaseTool):
     """TestSSL.sh SSL/TLS testing wrapper"""
     
     def __init__(self, config):
+        # resolve the actual binary before calling super()
+        import shutil
+        if shutil.which("testssl"):
+            self._bin = "testssl"
+        elif shutil.which("testssl.sh"):
+            self._bin = "testssl.sh"
+        else:
+            self._bin = "testssl"   # will fail is_available check gracefully
+        self.tool_name = self._bin
         super().__init__(config)
-        self.tool_name = "testssl.sh"
     
     def get_command(self, target: str, **kwargs) -> List[str]:
         """Build testssl command"""
-        command = ["testssl.sh"]
+        command = [self._bin]
         
         # Machine-readable output
         command.append("--jsonfile=-")

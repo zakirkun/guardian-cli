@@ -24,29 +24,25 @@ class NiktoTool(BaseTool):
         # Priority: kwargs (workflow) > config > hardcoded defaults
         
         command = ["nikto"]
-        
+
         # Host
         command.extend(["-h", target])
-        
-        # Output format - workflow parameter or config or default
-        output_format = kwargs.get("format", config.get("format", "txt"))
-        command.extend(["-Format", output_format])
-        
+
         # SSL
         if target.startswith("https"):
             command.append("-ssl")
-        
-        # Tuning options - workflow parameter or config or default
-        tuning = kwargs.get("tuning", config.get("tuning", "x"))  # Default: all tests except DoS
-        command.extend(["-Tuning", tuning])
-        
-        # Timeout - workflow parameter or config or default
+
+        # Timeout (seconds per request)
         timeout = kwargs.get("timeout", config.get("timeout", 10))
         command.extend(["-timeout", str(timeout)])
-        
-        # No interactive mode
+
+        # Non-interactive (no prompts)
         command.append("-nointeractive")
-        
+
+        # NOTE: -Format json requires Perl JSON + XML::Writer which may not be installed.
+        # Use plain text (default) — parse_output already handles text format.
+        # NOTE: -Tuning without a valid argument list causes errors; omit to use defaults.
+
         return command
     
     def parse_output(self, output: str) -> Dict[str, Any]:

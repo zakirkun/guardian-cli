@@ -68,13 +68,9 @@ class SSLyzeTool(BaseTool):
             # HTTP security headers
             command.append("--http_headers")
         
-        # Timeout
-        timeout = config.get("timeout", 10)
-        command.extend(["--timeout", str(timeout)])
-        
-        # Quiet mode
-        command.append("--quiet")
-        
+        # Note: sslyze does not support --timeout or --quiet flags
+        # Remove them to avoid 'unrecognized arguments' errors
+
         return command
     
     def parse_output(self, output: str) -> Dict[str, Any]:
