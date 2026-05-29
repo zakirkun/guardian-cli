@@ -12,6 +12,28 @@ import sys
 
 # Import command groups
 from cli.commands import init, scan, recon, analyze, report, workflow, ai_explain, models
+from cli.commands.kb import kb_app
+from cli.commands.telemetry import telemetry_app
+
+
+def _get_version() -> str:
+    """Resolve installed version from package metadata.
+
+    Single source of truth — pyproject.toml. Avoids the previous
+    banner/pyproject mismatch where the banner said "v2.0" while the
+    package shipped as "0.1.0".
+    """
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            return version("guardian-cli")
+        except PackageNotFoundError:
+            return "0.0.0+local"
+    except Exception:
+        return "unknown"
+
+
+_VERSION = _get_version()
 
 banner = r"""
 [bold red]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣠⣤⣤⣤⣤⣤⣤⠀⠀⠀[/bold red]
@@ -23,7 +45,7 @@ banner = r"""
 [bold red]⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⠟⢁⣴⠿⠛⠋⣉⣁⣀⣀⣀⣉⡉⠛⠻⢿⡿⠃⠀⠀⠀⠀⠀⠀⠀⠀[/bold red]    [bold cyan] ██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║██║██╔══██║██║╚██╗██║[/bold cyan]
 [bold red]⠀⢰⣿⣿⣿⣿⣿⣿⣿⠃⡴⠋⣁⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/bold red]     [bold cyan] ╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║[/bold cyan]
 [bold red]⠀⣼⣿⣿⣿⣿⣿⣿⠃⠜⢠⣾⣿⣿⣿⣿⣿⡿⠿⠿⠛⠛⠛⠿⠿⢿⣆⠀⠀⠀⠀⠀⠀⠀⠀[/bold red]     [bold cyan]  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝[/bold cyan]
-[bold red]⠀⣿⣿⣿⣿⣿⣿⡟⠀⢰⣿⣿⣿⡿⠛⢋⣁⣤⣤⣴⣶⣶⣶⣶⣶⣤⣤⣀⣴⣾⠀⠀⠀⠀⠀⠀[/bold red]               [bold green]v2.0[/bold green] [dim]- AI-Powered Penetration Testing Framework[/dim]
+[bold red]⠀⣿⣿⣿⣿⣿⣿⡟⠀⢰⣿⣿⣿⡿⠛⢋⣁⣤⣤⣴⣶⣶⣶⣶⣶⣤⣤⣀⣴⣾⠀⠀⠀⠀⠀⠀[/bold red]               [bold green]v""" + _VERSION + """[/bold green] [dim]- AI-Powered Penetration Testing Framework[/dim]
 [bold red]⠀⢿⣿⣿⣿⣿⣿⠇⠀⣿⣿⣿⣿⠃⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀[/bold red]
 [bold red]⠀⣶⣿⣿⣿⣿⣿⠀⢰⣿⣿⣿⡏⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀[/bold red]    [dim]AI Providers:[/dim]
 [bold red]⠀⣿⣿⣿⣿⣿⠇⠀⢸⣿⣿⣿⢀⣿⣿⣿⣿⣿⡿⠛⠋⠉⠉⠉⠛⢿⣿⣿⣿⠀⠀⠀⠀⠀⠀[/bold red]        • OpenAI GPT-4o  • Claude 3.5 Sonnet
@@ -57,6 +79,8 @@ app.command(name="report")(report.report_command)
 app.command(name="workflow")(workflow.workflow_command)
 app.command(name="ai")(ai_explain.explain_command)
 app.command(name="models")(models.list_models_command)
+app.add_typer(kb_app, name="kb", help="Knowledge base maintenance.")
+app.add_typer(telemetry_app, name="telemetry", help="Tool-selection telemetry (opt-in).")
 
 @app.callback()
 def callback():
@@ -72,9 +96,8 @@ def callback():
 def version_callback(value: bool):
     """Print version and exit"""
     if value:
-        # console.print(banner)
+        print(f"guardian-cli {_VERSION}")
         raise typer.Exit()
-
 
 
 @app.command()
@@ -85,11 +108,11 @@ def version(
         "-v",
         help="Show version and exit",
         callback=version_callback,
-        is_eager=True
+        is_eager=True,
     )
 ):
     """Show Guardian version"""
-    pass
+    print(f"guardian-cli {_VERSION}")
 
 
 def main():

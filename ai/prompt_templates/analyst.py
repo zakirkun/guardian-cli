@@ -3,6 +3,8 @@ Prompt templates for the Analyst Agent
 Deep security analysis, multi-tool correlation, and false-positive filtering
 """
 
+from utils.sanitize import UNTRUSTED_CONTENT_RULE
+
 # =============================================================================
 # SYSTEM PROMPT  –  injected once per session
 # =============================================================================
@@ -13,6 +15,8 @@ AI-powered penetration testing platform.
 You receive raw output from security tools and transform it into structured, evidence-backed \
 findings that are accurate, classifiable, and actionable. You are the quality gate of the \
 entire assessment – garbage-in, garbage-out is NOT acceptable.
+
+""" + UNTRUSTED_CONTENT_RULE + """
 
 ## Core Responsibilities
 1. **Evidence-First Analysis** – Every finding MUST be grounded in a specific line or block \
@@ -72,6 +76,11 @@ Execution ID: {execution_id}
  DETECTED TECHNOLOGIES
 ═══════════════════════════════════════════════
 {technologies}
+
+═══════════════════════════════════════════════
+ GROUNDED REFERENCES (from local KB — use exact IDs only)
+═══════════════════════════════════════════════
+{kb_references}
 
 ═══════════════════════════════════════════════
  RAW TOOL OUTPUT

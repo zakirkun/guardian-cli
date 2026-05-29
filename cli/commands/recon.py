@@ -16,7 +16,19 @@ console = Console()
 
 
 def recon_command(
-    domain: str = typer.Option(..., "--domain", "-d", help="Target domain for reconnaissance"),
+    target: str = typer.Option(
+        None,
+        "--target",
+        "-t",
+        help="Target domain/host for reconnaissance",
+    ),
+    domain: str = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="[DEPRECATED] Use --target instead. Retained for backwards compatibility.",
+        hidden=True,
+    ),
     config_file: Path = typer.Option(
         "config/guardian.yaml",
         "--config",
@@ -48,23 +60,34 @@ def recon_command(
 ):
     """
     Run reconnaissance workflow on a target domain
-    
+
     Performs:
     - Subdomain enumeration
-    - Port scanning  
+    - Port scanning
     - Service detection
     - Technology fingerprinting
     """
-    console.print(f"[bold cyan]🔍 Starting Reconnaissance: {domain}[/bold cyan]\n")
-    
-    # Validate target
-    if not is_valid_domain(domain) and not is_valid_url(domain):
-        console.print(f"[bold red]Error:[/bold red] Invalid domain: {domain}")
+    # Resolve --target / --domain (legacy). --domain still works but emits a
+    # deprecation note. One of the two MUST be supplied.
+    if domain and not target:
+        console.print(
+            "[yellow]Note:[/yellow] --domain is deprecated; please use --target instead."
+        )
+        target = domain
+    if not target:
+        console.print("[bold red]Error:[/bold red] --target is required")
         raise typer.Exit(1)
-    
+
+    console.print(f"[bold cyan]🔍 Starting Reconnaissance: {target}[/bold cyan]\n")
+
+    # Validate target
+    if not is_valid_domain(target) and not is_valid_url(target):
+        console.print(f"[bold red]Error:[/bold red] Invalid domain: {target}")
+        raise typer.Exit(1)
+
     if dry_run:
         console.print("[yellow]DRY RUN MODE - No actual scanning will occur[/yellow]\n")
-        _show_recon_plan(domain)
+        _show_recon_plan(target)
         return
     
     # Load configuration
@@ -99,7 +122,7 @@ def recon_command(
             task = progress.add_task("Running reconnaissance workflow...", total=None)
             
             # Run async workflow
-            results = asyncio.run(_run_recon_workflow(config, domain))
+            results = asyncio.run(_run_recon_workflow(config, target))
             
             progress.update(task, completed=True)
         

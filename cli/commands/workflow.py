@@ -36,7 +36,19 @@ def workflow_command(
         "--provider",
         "-p",
         help="Override AI provider (gemini, openai, claude, openrouter)"
-    )
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip per-tool confirmation prompts (for unattended/CI runs).",
+    ),
+    resume: str = typer.Option(
+        None,
+        "--resume",
+        "-r",
+        help="Resume from a saved session ID (skips already-completed steps).",
+    ),
 ):
     """
     Run or list penetration testing workflows
@@ -56,11 +68,14 @@ def workflow_command(
             console.print("[bold red]Error:[/bold red] --name is required for 'run' action")
             raise typer.Exit(1)
 
-        if not target:
-            console.print("[bold red]Error:[/bold red] --target is required for 'run' action")
+        if not target and not resume:
+            console.print(
+                "[bold red]Error:[/bold red] --target is required for 'run' action "
+                "(unless --resume is used)"
+            )
             raise typer.Exit(1)
 
-        _run_workflow(name, target, config_file, model, provider)
+        _run_workflow(name, target, config_file, model, provider, assume_yes=yes, resume=resume)
     else:
         console.print(f"[bold red]Error:[/bold red] Unknown action: {action}")
         raise typer.Exit(1)
@@ -107,7 +122,7 @@ def _list_workflows():
 
 
 
-def _run_workflow(name: str, target: str, config_file: Path, model: str | None = None, provider: str | None = None):
+def _run_workflow(name: str, target: str, config_file: Path, model: str | None = None, provider: str | None = None, assume_yes: bool = False, resume: str | None = None):
     """Run a workflow"""
     console.print(f"[bold cyan]🚀 Running {name} workflow on {target}[/bold cyan]\n")
 
@@ -133,9 +148,14 @@ def _run_workflow(name: str, target: str, config_file: Path, model: str | None =
 
     
     try:
-        engine = WorkflowEngine(config, target)
-        # Wire Rich console so workflow can stream output and show AI panels
+        engine = WorkflowEngine(config, target or "", assume_yes=assume_yes)
         engine.set_console(console)
+
+        if resume:
+            if not engine.resume_session(resume):
+                console.print(f"[bold red]Error:[/bold red] Cannot resume session '{resume}'")
+                raise typer.Exit(1)
+            console.print(f"[dim]Resumed session: {resume}[/dim]")
 
         if name == "autonomous":
             results = asyncio.run(engine.run_autonomous())

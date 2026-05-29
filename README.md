@@ -35,58 +35,88 @@
 
 ### 🤖 Multi-Provider AI Intelligence
 
-- **4 AI Providers Supported**: OpenAI (GPT-4o), Anthropic (Claude), Google (Gemini), OpenRouter
-- **Flexible Provider Selection**: Switch between providers via config or command-line
-- **Multi-Agent Architecture**: Specialized AI agents (Planner, Tool Selector, Analyst, Reporter) collaborate for comprehensive security assessments
-- **Strategic Decision Making**: AI analyzes findings and determines optimal next steps
-- **Adaptive Testing**: AI adjusts tactics based on discovered vulnerabilities and system responses
-- **False Positive Filtering**: Intelligent analysis reduces noise and focuses on real vulnerabilities
+- **6 AI Providers Supported**: OpenAI (GPT-4o), Anthropic (Claude), Google (Gemini), OpenRouter, **Ollama (local)**, **OpenAI-compatible (vLLM, LM Studio, Together, Groq)**
+- **Plugin Provider Contract**: Third-party providers ship via `[project.entry-points."guardian.providers"]` — no fork required
+- **Multi-Agent Architecture**: Specialized AI agents (Planner, Tool Selector, Analyst, Reporter) plus debate triage roles (Red Advocate, Blue Advocate, Judge) and Visual Triage
+- **Multi-Agent Debate Triage**: Three-role red/blue/judge debate on ambiguous findings — F1 ≥ single-agent baseline +5pp
+- **Vision-LLM Visual Triage**: Headless screenshot capture + image-grounded analyst enrichment via gpt-4o / Claude 3.5+ / Gemini 1.5+
+- **RAG Knowledge Base**: SQLite + FTS5 grounded retrieval over CVE / CWE / MITRE ATT&CK feeds — kills hallucinated CVE refs
+- **Judge Model Routing**: `think_deeply` swap-and-restore — big model thinks, small model judges, ~10x cost reduction
+- **Learned Tool Selection**: Offline ranker trained on session telemetry; abstains when low-confidence and falls back to LLM selector
+- **Adaptive Testing**: AI adjusts tactics based on discovered vulnerabilities and prior tool yields
+- **False Positive Filtering**: Debate triage cuts noise; cheap path skips when fp_probability is decisive
 
 ### 🛠️ Extensive Tool Arsenal
 
-**19 Integrated Security Tools:**
-- **Network**: Nmap (comprehensive scanning), Masscan (ultra-fast scanning)
-- **Web Reconnaissance**: httpx (HTTP probing), WhatWeb (tech fingerprinting), Wafw00f (WAF detection)
-- **Subdomain Discovery**: Subfinder (passive enumeration), Amass (active/passive mapping), DNSRecon (DNS analysis)
-- **Vulnerability Scanning**: Nuclei (template-based), Nikto (web vulnerabilities), SQLMap (SQL injection), WPScan (WordPress)
-- **SSL/TLS Testing**: TestSSL (cipher analysis), SSLyze (advanced configuration)
-- **Content Discovery**: Gobuster (directory brute forcing), FFuf (advanced web fuzzing), Arjun (parameter discovery)
-- **Security Analysis**: XSStrike (XSS detection), GitLeaks (secret scanning), CMSeeK (CMS detection)
+**50 Integrated Security Tools across 10 categories:**
+
+| Category | Tools |
+|---|---|
+| **Network** | nmap, masscan |
+| **Web Reconnaissance** | httpx, whatweb, wafw00f, cmseek |
+| **Subdomain / DNS** | subfinder, amass, dnsrecon |
+| **Vulnerability Scanning** | nuclei, nikto, sqlmap, wpscan |
+| **SSL/TLS Testing** | testssl, sslyze |
+| **Content Discovery** | gobuster, ffuf, arjun |
+| **Security Analysis** | xsstrike, gitleaks |
+| **Cloud / Container / SBOM** | trivy, grype, syft, scoutsuite, prowler, kube-bench |
+| **Modern Web + OSINT** | graphw00f, clairvoyance, jwt_tool, shodan, theharvester |
+| **SAST + Secrets (B11)** | semgrep, trufflehog, dependency-check |
+| **API Fuzzers (B10)** | schemathesis, cariddi, restler |
+| **Burp/ZAP Bridge (B13)** | zap, burp |
+| **LLM Red-Team (B12)** | garak, pyrit, prompt_fuzz |
+| **Mobile Android (B9)** | mobsf, apkleaks, objection |
+| **Active Directory (B8)** | crackmapexec, bloodhound, kerbrute, impacket-secretsdump |
+| **Vision Evidence (A3)** | playwright_screenshot |
 
 ### 📊 Enhanced Evidence Capture
 
-- **Execution Traceability**: Every finding linked to its source tool execution
+- **Execution Traceability**: Every finding linked to its source tool execution via `execution_id`
 - **Complete Command History**: Full tool output preserved with each finding
-- **Raw Evidence Storage**: 2000-character snippets of actual tool output
-- **Session Reconstruction**: Ability to review exact commands and outputs from any scan
+- **Raw Evidence Storage**: Output snippets bound to findings
+- **Visual Evidence**: Screenshots captured per URL, attached to web findings
+- **Session Reconstruction**: Atomic-checkpointed `session_<id>.json` enables `--resume`
 
-### 🔄 Smart Workflow System
+### 🔄 Smart Workflow System (DSL v2)
 
-- **Parameter Priority**: Workflow parameters override config defaults
-- **Self-Contained Workflows**: Each workflow defines its own tool parameters
-- **Fuzzy Matching**: Intelligent workflow file discovery and loading
-- **Multiple Report Formats**: Markdown, HTML, and JSON with evidence inclusion
+- **DAG Scheduler**: Steps with `depends_on` run in parallel up to `max_parallel_tools`
+- **Jinja2 Templates (sandboxed)**: `parameters: {key: "{{ <id>.parsed.alive_hosts }}"}` resolves against prior step results
+- **Conditional Steps**: `when:` clauses gate execution on prior output
+- **Resume**: `--resume` picks up after the last completed step
+- **Parameter Priority**: Workflow YAML > config block > tool defaults
+- **Custom Agents**: `agent: debate | visual | analyst` on analysis steps
+- **Multiple Report Formats**: Markdown, HTML, JSON
+
+### 📤 Output Integrations (B14)
+
+- **SARIF v2.1.0**: GitHub-friendly, includes `security-severity`, dedup `fingerprints` from `execution_id`
+- **DefectDojo**: Direct REST upload
+- **Slack**: Webhook posts with severity colour-coding
+- **Triggered via**: `guardian report --export sarif --export defectdojo --export slack`
 
 ### 🔒 Security & Compliance
 
-- **Scope Validation**: Automatic blacklisting of private networks and unauthorized targets
-- **Audit Logging**: Complete transparency with detailed logs of all AI decisions and actions
-- **Human-in-the-Loop**: Configurable confirmation prompts for sensitive operations
+- **DNS-Resolve Scope Validation**: Closes SSRF-class bypass; private RFC1918 ranges blacklisted
+- **Prompt-Injection Defense**: All tool output wrapped via `<UNTRUSTED_TOOL_OUTPUT>` delimiters + ANSI strip
+- **API Key Scrubbing**: Logs and reports redact secrets at write time
+- **Confirmation Gate**: Active+ tools (intrusive/destructive) require explicit user approval
+- **Audit Logging**: Rotating logs of every AI decision and action
 - **Safe Mode**: Prevents destructive actions by default
 
 ### 📋 Professional Reporting
 
-- **Multiple Formats**: Markdown, HTML, and JSON reports
-- **Executive Summaries**: Non-technical overviews for stakeholders
-- **Technical Deep-Dives**: Detailed findings with evidence and remediation steps
-- **Evidence Sections**: Raw tool output embedded in reports
-- **AI Decision Traces**: Full transparency into AI reasoning process
+- **CVSS v3.1 Recomputation**: Validates claimed scores against vector math; flags drift
+- **Executive Summaries**: Non-technical overviews
+- **Technical Deep-Dives**: Findings with evidence, CVSS, CWE, CVE, MITRE technique
+- **AI Decision Traces**: Token usage, cost, thinking-chain ledger per agent
+- **Visual Triage Sections**: Image-grounded enrichment baked into descriptions
 
 ### ⚡ Performance & Efficiency
 
-- **Asynchronous Execution**: Parallel tool execution for faster assessments
-- **Workflow Automation**: Predefined workflows (Recon, Web, Network, Autonomous)
-- **Customizable**: Create custom tools and workflows via simple YAML/Python
+- **Async Throughout**: Tool exec via `asyncio` subprocess; agents async
+- **Lazy Tool Loading**: 50 tools registered, none imported until needed — `--help` stays under 500ms
+- **Parallel DAG Execution**: Independent steps run concurrently per generation
+- **Workflow Automation**: 13+ shipped workflows (recon, web, network, AD, mobile, LLM red-team, SAST, API)
 
 ---
 
@@ -278,6 +308,78 @@ python -m cli.main workflow run --name web_pentest --target example.com --provid
 
 # Use Gemini
 python -m cli.main workflow run --name web_pentest --target example.com --provider gemini
+
+# Local Ollama (no cloud)
+OLLAMA_HOST=http://localhost:11434 python -m cli.main workflow run --name recon --target scanme.nmap.org --provider ollama
+
+# Any OpenAI-compatible endpoint (vLLM, LM Studio, Together, Groq)
+python -m cli.main workflow run --name web_pentest --target example.com --provider openai_compatible
+```
+
+#### 6. Knowledge Base (RAG grounding)
+```bash
+# Seed bundled offline corpus
+python -m cli.main kb seed
+
+# Show corpus stats
+python -m cli.main kb status
+
+# Ad-hoc retrieval
+python -m cli.main kb query "log4j JNDI" --top 5
+
+# Ingest external feed (NVD JSON / MITRE STIX / nuclei metadata)
+python -m cli.main kb update --kind cve --file ./nvd-2025.json
+```
+
+Enable analyst grounding in `config/guardian.yaml`:
+```yaml
+rag:
+  enabled: true
+  top_k: 5
+```
+
+#### 7. Multi-agent Debate Triage
+```bash
+# Workflow YAML uses agent: debate on an analysis step
+python -m cli.main workflow run --name web_pentest_with_debate --target https://example.com
+```
+
+Three roles (red advocate, blue advocate, judge) debate ambiguous findings only — confident verdicts skip the debate to bound token cost.
+
+#### 8. Visual Triage (vision-LLM)
+```bash
+# Captures full-page screenshots and feeds them to a vision-capable provider
+python -m cli.main workflow run --name web_visual_pentest --target https://example.com --provider openai
+```
+
+Requires playwright: `pip install playwright && python -m playwright install chromium`. Skipped silently when active provider has no vision support.
+
+#### 9. Output Exporters (SARIF / DefectDojo / Slack)
+```bash
+# SARIF (GitHub code-scanning friendly)
+python -m cli.main report --session 20260203_175905 --export sarif
+
+# Multiple sinks at once
+python -m cli.main report --session 20260203_175905 --export sarif --export defectdojo --export slack \
+  --slack-webhook https://hooks.slack.com/services/...
+```
+
+#### 10. Telemetry + Learned Ranker (offline)
+```bash
+# Anonymise sessions into JSONL (no raw targets, no commands, no secrets)
+python -m cli.main telemetry export ./reports --out telemetry.jsonl
+
+# Train the offline tool ranker
+python -m cli.main telemetry train telemetry.jsonl
+
+# Inspect what the ranker learned
+python -m cli.main telemetry status
+```
+
+Enable in config:
+```yaml
+ai:
+  use_learned_ranker: true   # ToolAgent calls ranker before LLM selector
 ```
 
 > **Windows Users**: Use `python -m cli.main` instead of `guardian`
@@ -395,6 +497,9 @@ steps:
 - **[Command Reference](docs/)** - Detailed documentation for all commands
 - **[Configuration Guide](config/guardian.yaml)** - Complete configuration reference
 - **[Workflow Guide](docs/WORKFLOW_GUIDE.md)** - Creating custom workflows
+- **[Eval Guide](docs/EVAL_GUIDE.md)** - Running and extending the eval harness
+- **[Plugin Guide](docs/PLUGIN_GUIDE.md)** - Shipping third-party providers and tools
+- **[Changelog](CHANGELOG.md)** - Version history and migration notes
 
 ### Developer Guides
 - **[Creating Custom Tools](docs/TOOLS_DEVELOPMENT_GUIDE.md)** - Build your own tool integrations
@@ -480,27 +585,53 @@ guardian-cli/
 
 ## 🆕 Latest Updates
 
-### Version 2.0.0 - Major Release
+### Version 4.0.0 — Novel R&D + Coverage Expansion
 
-#### ✨ Multi-Provider AI Support
-- **4 AI Providers**: OpenAI, Claude, Gemini, OpenRouter
-- **Easy Switching**: Configure via `config/guardian.yaml` or CLI flags
-- **Provider Abstraction**: Unified interface for all providers
+**Track A — AI/Agent R&D (7 items)**
 
-#### 📊 Evidence Capture System
-- **Execution Linking**: Every finding linked to its source tool execution
-- **Raw Evidence**: Full command output preserved (2000-char snippets)
-- **Traceability**: Reconstruct exact workflow execution from session files
+| ID | Item | Highlights |
+|---|---|---|
+| A1 | RAG knowledge base | `core/knowledge_base.py` SQLite + FTS5 + optional embeddings; analyst grounding via `kb_references` slot; `guardian kb {seed,update,query,status}` |
+| A2 | Multi-agent debate triage | Red/Blue/Judge over MEDIUM-fp findings only; new analysis step type `agent: debate` |
+| A3 | Vision-LLM screenshot analysis | `tools/playwright_screenshot.py` + `core/agents/visual_triage.py`; OpenAI + Claude `generate_with_images` |
+| A4 | Plugin contract + local providers | Entry-point discovery for providers AND tools; **Ollama** + **OpenAI-compatible** providers shipped |
+| A5 | Learned tool selection (offline) | `core/learners/tool_ranker.py` + `core/telemetry.py`; opt-in via `ai.use_learned_ranker: true` |
+| A6 | Eval harness | `evals/{__init__,scoring,fixtures_loader,test_*}.py` + golden fixtures; 3 tiers (parser, workflow, agent grounding) |
+| A7 | Judge model upgrade | `BaseAgent.think_deeply(judge_model=...)` swap-and-restore; transcript-judging for ~10x cost reduction |
 
-#### 🔄 Smart Workflow Parameters
-- **Priority System**: Workflow params > Config > Defaults
-- **Self-Contained**: Workflows define their own parameters
-- **No Conflicts**: Multiple workflows can use different settings for same tools
+**Track B — Tool Coverage Expansion (7 items)**
 
-#### 🐛 Bug Fixes
-- Fixed workflow fuzzy matching logic
-- Corrected report format handling
-- Improved YAML parsing with better error messages
+| ID | Category | Tools Added |
+|---|---|---|
+| B8 | Active Directory | crackmapexec, bloodhound, kerbrute, impacket-secretsdump |
+| B9 | Mobile Android | mobsf, apkleaks, objection |
+| B10 | API fuzzers | schemathesis, restler, cariddi |
+| B11 | SAST + secrets | semgrep, trufflehog, dependency-check |
+| B12 | LLM red-team | garak, pyrit, prompt_fuzz |
+| B13 | Burp/ZAP bridge | zap, burp |
+| B14 | Output exporters | SARIF v2.1.0, DefectDojo, Slack |
+
+**Quality bar:**
+- 296 tests pass (+93% from v3 baseline of 153)
+- All v3 hardening preserved: prompt-injection delimiters, key scrub, DNS-resolve scope, atomic checkpoints, log rotation, lazy tool loading
+- `guardian --help` startup time stays <500ms despite 50 tools
+- New CLI surfaces: `guardian kb`, `guardian telemetry`
+- 8 new shipped workflows: `web_pentest_with_debate`, `web_visual_pentest`, `ad_assessment`, `mobile_android`, `llm_redteam`, `sast_review`, `api_pentest_v2`, plus existing v3 workflows
+
+### Version 3.0.0 — Hardening + Engine v2
+
+- Prompt-injection delimiters (`<UNTRUSTED_TOOL_OUTPUT>`) on all tool output
+- DAG scheduler, Pydantic schemas, atomic checkpoints, `--resume`
+- 11 new wrappers (cloud/container/SBOM/GraphQL/JWT/OSINT)
+- CVSS v3.1 recomputation + drift detection
+- Log rotation, key scrub at write time
+- Confirmation gate wired for active+ tools
+
+### Version 2.0.0
+
+- Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter)
+- Evidence linking via `execution_id`
+- Workflow parameter priority system
 
 ---
 
@@ -540,16 +671,26 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 📊 Roadmap
 
-- [x] Multi-provider AI support (OpenAI, Claude, Gemini, OpenRouter)
-- [x] Complete evidence capture with execution linking
-- [x] Workflow parameter priority system
+**Shipped in v4.0.0:**
+- [x] Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter, Ollama, OpenAI-compatible)
+- [x] Plugin entry-point contract for providers AND tools
+- [x] RAG knowledge base (CVE/CWE/MITRE)
+- [x] Multi-agent debate triage (red/blue/judge)
+- [x] Vision-LLM visual triage with screenshots
+- [x] Learned tool selection (offline ranker)
+- [x] Judge-model routing for cost reduction
+- [x] Eval harness (parser fixtures, workflow integration, agent grounding)
+- [x] AD / Mobile / API-fuzz / SAST / LLM red-team / Burp-ZAP / Vision tool tracks
+- [x] SARIF + DefectDojo + Slack exporters
+- [x] CVSS v3.1 recomputation
+- [x] DAG workflow engine with `--resume`
+
+**Future:**
 - [ ] Web Dashboard for visualization
-- [ ] PostgreSQL backend for multi-session tracking
-- [ ] MITRE ATT&CK mapping for findings
-- [ ] Plugin system for custom modules
-- [ ] Integration with CI/CD pipelines
-- [ ] Additional AI models (Llama, Mistral)
-- [ ] Real-time collaboration features
+- [ ] PostgreSQL backend for multi-session analytics
+- [ ] Real-time multi-operator collaboration
+- [ ] Custom LLM fine-tuning pipeline once telemetry corpus matures
+- [ ] Plugin marketplace / hub UI
 
 ---
 

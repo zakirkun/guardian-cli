@@ -171,3 +171,70 @@ class ClaudeProvider(BaseProvider):
     def is_available(self) -> bool:
         """Check if provider is available"""
         return LANGCHAIN_AVAILABLE and bool(self.api_key) and self.backend is not None
+
+    # ── Vision (A3) ──────────────────────────────────────────────────────────
+
+    def supports_vision(self) -> bool:
+        """All Claude 3+ models accept image inputs."""
+        m = (self.model_name or "").lower()
+        return "claude-3" in m or "claude-4" in m or "claude-sonnet" in m or "claude-opus" in m
+
+    async def generate_with_images(
+        self,
+        prompt: str,
+        images: list,
+        system_prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Anthropic-shaped multimodal call.
+
+        Anthropic accepts images as ``{"type":"image","source":{"type":"base64",
+        "media_type":"image/png","data":"..."}}``. LangChain's HumanMessage
+        passes content lists through verbatim, so this shape works as-is.
+        """
+        import base64
+        import mimetypes
+        from pathlib import Path
+
+        await self._apply_rate_limit() if hasattr(self, "_apply_rate_limit") else None
+
+        content: list = [{"type": "text", "text": prompt}]
+        for img in images:
+            path = img.get("path") if isinstance(img, dict) else img
+            if not path:
+                continue
+            p = Path(path)
+            if not p.exists():
+                self.logger.warning(f"Vision: skipping missing image {p}")
+                continue
+            mime = (img.get("mime") if isinstance(img, dict) else None)
+            if not mime:
+                mime, _ = mimetypes.guess_type(str(p))
+                mime = mime or "image/png"
+            with open(p, "rb") as fh:
+                b64 = base64.b64encode(fh.read()).decode("ascii")
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": mime, "data": b64},
+            })
+
+        messages = []
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+        messages.append(HumanMessage(content=content))
+
+        response = await self.backend.ainvoke(messages)
+        token_usage = response.response_metadata.get("usage", {}) or response.response_metadata.get("token_usage", {})
+        prompt_tokens = token_usage.get("input_tokens", 0) or token_usage.get("prompt_tokens", 0)
+        completion_tokens = token_usage.get("output_tokens", 0) or token_usage.get("completion_tokens", 0)
+        total_tokens = prompt_tokens + completion_tokens
+
+        return {
+            "response":           response.content if isinstance(response.content, str) else str(response.content),
+            "reasoning":          "",
+            "prompt_tokens":      prompt_tokens,
+            "completion_tokens":  completion_tokens,
+            "total_tokens":       total_tokens,
+            "cost_usd":           self._estimate_cost(prompt_tokens, completion_tokens) if hasattr(self, "_estimate_cost") else 0.0,
+            "model":              self.model_name,
+            "provider":           "claude",
+        }

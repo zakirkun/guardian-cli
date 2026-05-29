@@ -1,0 +1,54 @@
+name: ad_assessment
+description: Active Directory engagement — enum, spray, BloodHound, secretsdump.
+version: 2
+
+steps:
+  - id: kerb_userenum
+    type: tool
+    tool: kerbrute
+    objective: "Validate username list against KDC (no auth events)"
+    parameters:
+      action: userenum
+      domain: corp.local
+      wordlist: users.txt
+      threads: 8
+
+  - id: cme_enum
+    type: tool
+    tool: crackmapexec
+    depends_on: [kerb_userenum]
+    objective: "Authenticated SMB enum: shares, sessions, password policy"
+    parameters:
+      protocol: smb
+      action: shares
+
+  - id: bloodhound_collect
+    type: tool
+    tool: bloodhound
+    depends_on: [cme_enum]
+    objective: "Collect AD object graph for cypher-based analysis"
+    parameters:
+      collection: All
+
+  - id: secrets
+    type: tool
+    tool: impacket-secretsdump
+    depends_on: [bloodhound_collect]
+    when: "cme_enum.parsed.creds_validated | length > 0"
+    objective: "DCSync hash extraction (DA cred required)"
+    parameters:
+      just_dc: true
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [bloodhound_collect, secrets]
+    objective: "Build attack chain from low-priv to DA via BloodHound paths"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true   # AD work is always gated.

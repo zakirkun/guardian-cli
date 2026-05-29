@@ -15,6 +15,7 @@ from datetime import datetime
 from abc import ABC, abstractmethod
 
 from utils.logger import get_logger
+from utils.sanitize import strip_control_chars
 
 
 class BaseTool(ABC):
@@ -131,8 +132,11 @@ class BaseTool(ABC):
                     )
 
             duration = (datetime.now() - start_time).total_seconds()
-            output_text = "\n".join(lines)
-            error_text = "\n".join(err_lines)
+            # Strip ANSI / control chars before storing or feeding to the LLM —
+            # an attacker-controlled tool output cannot inject terminal escape
+            # codes or smuggle control bytes through to the prompt.
+            output_text = strip_control_chars("\n".join(lines))
+            error_text = strip_control_chars("\n".join(err_lines))
 
             # ── Parse & return ────────────────────────────────────────────────
             parsed = self.parse_output(output_text)

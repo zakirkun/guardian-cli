@@ -1,0 +1,34 @@
+name: jwt_audit
+description: JWT analysis — alg-none, alg confusion, weak HMAC, claim injection.
+version: 2
+
+steps:
+  - id: scan
+    type: tool
+    tool: jwt_tool
+    objective: "Run all JWT attack tests against the supplied token"
+    parameters:
+      mode: scan
+
+  - id: crack
+    type: tool
+    tool: jwt_tool
+    depends_on: [scan]
+    when: "scan.parsed.alg | lower in ['hs256','hs384','hs512']"
+    objective: "Try wordlist-cracking the HMAC secret"
+    parameters:
+      mode: crack
+      wordlist: "/opt/wordlists/jwt.secrets.list"
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [scan]
+    objective: "Map JWT findings to OWASP A07 (Auth Failures)"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  require_confirmation: true

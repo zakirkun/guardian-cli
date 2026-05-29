@@ -171,3 +171,76 @@ class OpenAIProvider(BaseProvider):
     def is_available(self) -> bool:
         """Check if provider is available"""
         return LANGCHAIN_AVAILABLE and bool(self.api_key) and self.backend is not None
+
+    # ── Vision (A3) ──────────────────────────────────────────────────────────
+
+    def supports_vision(self) -> bool:
+        """gpt-4o / gpt-4-turbo / gpt-4-vision all accept image inputs."""
+        m = (self.model_name or "").lower()
+        return "gpt-4o" in m or "gpt-4-turbo" in m or "vision" in m
+
+    async def generate_with_usage_with_images(
+        self,
+        prompt: str,
+        images: list,
+        system_prompt: str = "",
+    ) -> dict:
+        """Image-aware variant of generate_with_usage.
+
+        Sends an OpenAI multimodal HumanMessage shaped as
+        ``[{type:"text",...}, {type:"image_url", image_url:...}]``.
+
+        Each ``images[i]`` is ``{"path": str}`` — the file is base64-
+        encoded and inlined as ``data:`` URL. Remote URLs would also work
+        but the screenshot tool only emits local paths.
+        """
+        import base64
+        import mimetypes
+        from pathlib import Path
+
+        await self._apply_rate_limit()
+
+        content: list = [{"type": "text", "text": prompt}]
+        for img in images:
+            path = img.get("path") if isinstance(img, dict) else img
+            if not path:
+                continue
+            p = Path(path)
+            if not p.exists():
+                self.logger.warning(f"Vision: skipping missing image {p}")
+                continue
+            mime = img.get("mime") if isinstance(img, dict) else None
+            if not mime:
+                mime, _ = mimetypes.guess_type(str(p))
+                mime = mime or "image/png"
+            with open(p, "rb") as fh:
+                b64 = base64.b64encode(fh.read()).decode("ascii")
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            })
+
+        messages = []
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+        messages.append(HumanMessage(content=content))
+
+        response = await self.backend.ainvoke(messages)
+        token_usage = response.response_metadata.get("token_usage", {})
+        prompt_tokens = token_usage.get("prompt_tokens", 0)
+        completion_tokens = token_usage.get("completion_tokens", 0)
+        total_tokens = token_usage.get("total_tokens", prompt_tokens + completion_tokens)
+
+        return {
+            "response":           response.content,
+            "reasoning":          "",
+            "prompt_tokens":      prompt_tokens,
+            "completion_tokens":  completion_tokens,
+            "total_tokens":       total_tokens,
+            "cost_usd":           self._estimate_cost(prompt_tokens, completion_tokens),
+            "model":              self.model_name,
+            "provider":           "openai",
+        }
+
+    async def generate_with_images(self, prompt, images, system_prompt=None):
+        return await self.generate_with_usage_with_images(prompt, images, system_prompt or "")

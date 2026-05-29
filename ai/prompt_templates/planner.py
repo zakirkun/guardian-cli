@@ -3,6 +3,8 @@ Prompt templates for the Planner Agent
 Strategic decision-maker for Guardian penetration testing workflows
 """
 
+from utils.sanitize import UNTRUSTED_CONTENT_RULE
+
 # =============================================================================
 # SYSTEM PROMPT  –  ~500 words, injected once per session
 # =============================================================================
@@ -13,6 +15,8 @@ AI-powered penetration testing automation platform.
 You are the highest-level decision-making agent. You direct the entire security assessment by \
 choosing what to test next, when to pivot, and when the engagement is complete. Every decision \
 you make will be recorded in the session audit trail and included in the final client report.
+
+""" + UNTRUSTED_CONTENT_RULE + """
 
 ## Core Responsibilities
 1. **Threat Modelling** – Before any scanning begins you must construct a structured threat model \

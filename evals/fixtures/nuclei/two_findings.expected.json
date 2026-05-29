@@ -1,0 +1,8 @@
+{
+  "vulnerabilities": [
+    {"template": "CVE-2021-44228", "severity": "critical", "matched_at": "https://example.com/api"},
+    {"template": "exposed-admin-panel", "severity": "medium", "matched_at": "https://example.com/admin"}
+  ],
+  "count": 2,
+  "by_severity": {"critical": 1, "medium": 1}
+}

@@ -1,0 +1,39 @@
+name: sast_review
+description: SAST + dependency CVE + secret scanning for code repositories.
+version: 2
+
+steps:
+  - id: sast
+    type: tool
+    tool: semgrep
+    objective: "Run Semgrep with auto-config to flag insecure code patterns"
+    parameters:
+      config: auto
+      severity: ["ERROR", "WARNING"]
+
+  - id: secrets
+    type: tool
+    tool: trufflehog
+    objective: "Scan for hardcoded secrets and credentials"
+    parameters:
+      mode: filesystem
+      only_verified: false
+
+  - id: deps
+    type: tool
+    tool: dependency-check
+    objective: "Identify CVEs in declared dependencies"
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [sast, secrets, deps]
+    objective: "Correlate SAST + dep + secret findings; map to OWASP A02/A06/A07"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 3
+  require_confirmation: false

@@ -3,8 +3,12 @@ Strategic Planner Agent
 Decides next steps in the penetration testing workflow
 """
 
+import json
+import re
 from typing import Dict, Any
 from core.agent import BaseAgent
+from core.schemas import PlannerDecision, parse_or_none
+from utils.sanitize import strip_control_chars, wrap_untrusted
 from ai.prompt_templates import (
     PLANNER_SYSTEM_PROMPT,
     PLANNER_DECISION_PROMPT,
@@ -39,9 +43,15 @@ class PlannerAgent(BaseAgent):
             target=self.memory.target,
             session_id=self.memory.session_id,
             completed_actions="\n".join(f"- {a}" for a in self.memory.completed_actions) or "None",
-            findings=findings_summary,
-            attack_surface="\n".join(f"- {e}" for e in self.memory.attack_surface) or "None discovered",
-            technologies=", ".join(self.memory.context.get("technologies", [])) or "Unknown",
+            # Findings/attack_surface/technologies are derived from external tool
+            # output and must be treated as untrusted data, not instructions.
+            findings=wrap_untrusted(findings_summary),
+            attack_surface=wrap_untrusted(
+                "\n".join(f"- {e}" for e in self.memory.attack_surface) or "None discovered"
+            ),
+            technologies=wrap_untrusted(
+                ", ".join(self.memory.context.get("technologies", [])) or "Unknown"
+            ),
             threat_model=self.memory.threat_model[:600] if self.memory.threat_model else "Not yet built",
             prior_reasoning_chain=self.memory.get_recent_thinking(3),
             available_actions=available_actions,
@@ -134,26 +144,103 @@ class PlannerAgent(BaseAgent):
         return "\n".join(f"- {action}" for action in actions)
     
     def _parse_decision(self, response: str) -> Dict[str, Any]:
-        """Parse AI response into structured decision"""
-        decision = {
+        """Parse AI response into structured decision.
+
+        Hardening notes:
+          * Try a strict JSON object first via Pydantic ``PlannerDecision``.
+            That gives us schema validation, action whitelist, length caps
+            and ``phase_transition`` for free.
+          * Fallback: header-based extraction with bounded length and
+            control-char stripping. Untrusted tool output that smuggled a
+            fake ``NEXT_ACTION:`` line through to the LLM context cannot
+            inject an arbitrary action name — the value is sanitized and
+            matched against ``self._known_actions()``. Off-list ⇒ ``unknown``.
+        """
+        decision: Dict[str, Any] = {
             "next_action": "unknown",
             "parameters": {},
-            "expected_outcome": ""
+            "expected_outcome": "",
+            "phase_transition": None,
         }
-        
-        # Simple parsing of the AI response
-        if "NEXT_ACTION:" in response:
-            start = response.find("NEXT_ACTION:") + len("NEXT_ACTION:")
-            end = response.find("PARAMETERS:", start) if "PARAMETERS:" in response else len(response)
-            decision["next_action"] = response[start:end].strip()
-        
-        if "PARAMETERS:" in response:
-            start = response.find("PARAMETERS:") + len("PARAMETERS:")
-            end = response.find("EXPECTED_OUTCOME:", start) if "EXPECTED_OUTCOME:" in response else len(response)
-            decision["parameters"] = response[start:end].strip()
-        
-        if "EXPECTED_OUTCOME:" in response:
-            start = response.find("EXPECTED_OUTCOME:") + len("EXPECTED_OUTCOME:")
-            decision["expected_outcome"] = response[start:].strip()
-        
+
+        if not isinstance(response, str) or not response.strip():
+            return decision
+
+        # ── 1. JSON-first attempt via Pydantic ────────────────────────────────
+        json_match = re.search(r"\{[\s\S]*\}", response)
+        if json_match:
+            parsed = parse_or_none(json_match.group(0), PlannerDecision)
+            if parsed is not None:
+                return {
+                    "next_action": parsed.next_action,
+                    "parameters": parsed.parameters,
+                    "expected_outcome": parsed.expected_outcome,
+                    "phase_transition": parsed.phase_transition,
+                }
+
+        # ── 2. Header-based extraction (legacy schema) ────────────────────────
+        action_match = re.search(
+            r"NEXT_ACTION:\s*([^\n]{0,200})", response, re.IGNORECASE
+        )
+        if action_match:
+            decision["next_action"] = self._normalize_action(action_match.group(1))
+
+        params_match = re.search(
+            r"PARAMETERS:\s*([^\n]{0,400})", response, re.IGNORECASE
+        )
+        if params_match:
+            decision["parameters"] = strip_control_chars(params_match.group(1).strip())[:400]
+
+        outcome_match = re.search(
+            r"EXPECTED_OUTCOME:\s*([\s\S]{0,400})", response, re.IGNORECASE
+        )
+        if outcome_match:
+            decision["expected_outcome"] = strip_control_chars(
+                outcome_match.group(1).strip()
+            )[:400]
+
         return decision
+
+    def _normalize_action(self, raw: str) -> str:
+        """Sanitize and whitelist-validate an action name."""
+        cleaned = strip_control_chars(str(raw)).strip().lower()
+        # Drop everything after first whitespace (prevents trailing instruction
+        # smuggling like "subdomain_enumeration; rm -rf /").
+        cleaned = cleaned.split()[0] if cleaned.split() else ""
+        # Strip non-alphanumeric/underscore.
+        cleaned = re.sub(r"[^a-z0-9_-]", "", cleaned)[:64]
+        if not cleaned:
+            return "unknown"
+        # Allow termination keywords.
+        if cleaned in ("done", "complete", "finish", "stop"):
+            return cleaned
+        if cleaned in self._known_actions():
+            return cleaned
+        # Off-list — log and downgrade rather than execute.
+        self.logger.warning(
+            f"Planner emitted unknown action '{cleaned}' — downgrading to 'unknown'"
+        )
+        return "unknown"
+
+    def _known_actions(self) -> set:
+        """Return the union of all phase-defined action names."""
+        actions: set = set()
+        for phase_actions in {
+            "reconnaissance": [
+                "subdomain_enumeration", "dns_enumeration",
+                "technology_detection", "port_scanning",
+            ],
+            "scanning": [
+                "service_detection", "vulnerability_scanning",
+                "web_probing", "ssl_analysis",
+            ],
+            "analysis": [
+                "correlate_findings", "risk_assessment",
+                "false_positive_filter", "prioritize_vulns",
+            ],
+            "reporting": [
+                "generate_report", "executive_summary", "remediation_plan",
+            ],
+        }.values():
+            actions.update(phase_actions)
+        return actions

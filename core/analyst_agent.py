@@ -14,6 +14,13 @@ from ai.prompt_templates import (
     ANALYST_FALSE_POSITIVE_PROMPT
 )
 from utils.helpers import parse_severity
+from utils.sanitize import wrap_untrusted
+
+try:
+    from core.knowledge_base import KnowledgeBase, hits_to_prompt_block
+    _KB_AVAILABLE = True
+except Exception:  # pragma: no cover — KB optional
+    _KB_AVAILABLE = False
 
 
 class AnalystAgent(BaseAgent):
@@ -21,6 +28,15 @@ class AnalystAgent(BaseAgent):
     
     def __init__(self, config, gemini_client, memory):
         super().__init__("Analyst", config, gemini_client, memory)
+        # KB grounding is opt-in. ``rag.enabled: false`` (default) keeps
+        # the analyst behavior unchanged so the existing eval baseline
+        # stays comparable. Operators flip it on once the corpus is seeded.
+        self._kb = None
+        if _KB_AVAILABLE and config.get("rag", {}).get("enabled", False):
+            try:
+                self._kb = KnowledgeBase()
+            except Exception as e:
+                self.logger.warning(f"KB init failed — grounding disabled: {e}")
     
     async def execute(self, tool_result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -69,9 +85,11 @@ class AnalystAgent(BaseAgent):
             target=target,
             command=command,
             execution_id=execution_id or "N/A",
-            output=output,
+            # Tool stdout is the canonical untrusted source — wrap it.
+            output=wrap_untrusted(output),
             prior_findings=prior_findings_text,
-            technologies=technologies_text,
+            technologies=wrap_untrusted(technologies_text),
+            kb_references=self._retrieve_kb_block(tool, output),
         )
         
         result = await self.think(prompt, ANALYST_SYSTEM_PROMPT)
@@ -117,7 +135,7 @@ class AnalystAgent(BaseAgent):
         
         prompt = ANALYST_CORRELATION_PROMPT.format(
             target=self.memory.target,
-            tool_results=tool_results,
+            tool_results=wrap_untrusted(tool_results),
         )
         
         result = await self.think(prompt, ANALYST_SYSTEM_PROMPT)
@@ -142,7 +160,7 @@ class AnalystAgent(BaseAgent):
             tool=finding.tool,
             severity=finding.severity,
             description=finding.description,
-            evidence=finding.evidence[:500],
+            evidence=wrap_untrusted(finding.evidence[:500]),
             context=context,
         )
         
@@ -157,6 +175,33 @@ class AnalystAgent(BaseAgent):
             "reasoning": result["reasoning"],
             "recommendation": self._extract_recommendation(result["response"])
         }
+
+    def _retrieve_kb_block(self, tool: str, output: str) -> str:
+        """Pull top-k grounded references for the analyst prompt.
+
+        Returns "(no KB references — disable rag.enabled if not needed)"
+        when the KB is off or empty, so the prompt slot is never blank
+        (some models trip on empty fenced sections).
+        """
+        if self._kb is None:
+            return "(KB grounding disabled — rag.enabled=false)"
+        try:
+            # Use a small slice of output as the query — first 600 chars
+            # captures titles/paths/IDs without overwhelming FTS5.
+            query = (tool + "\n" + (output or ""))[:600]
+            top_k = int(self.config.get("rag", {}).get("top_k", 5))
+            hits = self._kb.query(query, k=top_k)
+        except Exception as e:
+            self.logger.debug(f"KB retrieval failed (non-fatal): {e}")
+            return "(KB retrieval failed)"
+
+        if not hits:
+            return "(no matches in local KB for this tool output)"
+
+        # The block already self-delimits — but it's reference data we
+        # didn't write, so wrap as untrusted to keep the analyst from
+        # treating retrieved text as instructions.
+        return wrap_untrusted(hits_to_prompt_block(hits))
     
     def _parse_findings(
         self, 

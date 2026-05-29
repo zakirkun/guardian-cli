@@ -7,6 +7,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 from datetime import datetime
 from core.agent import BaseAgent
+from core.cvss_calculator import validate_against_claimed
 from ai.prompt_templates import (
     REPORTER_SYSTEM_PROMPT,
     REPORTER_EXECUTIVE_SUMMARY_PROMPT,
@@ -334,19 +335,39 @@ class ReporterAgent(BaseAgent):
         return f"{hours}h {minutes}m"
     
     def _format_findings_detailed(self) -> str:
-        """Format findings for AI consumption"""
-        formatted = []
-        
+        """Format findings for AI consumption.
+
+        v3.0 change: drop the 200-char description/evidence truncation that
+        forced the LLM to write reports from snippets. Pass the full evidence
+        with a generous cap (4000 chars per field) and let the model
+        summarise. This trades prompt size for reporting accuracy.
+        """
+        if not self.memory.findings:
+            return "No findings"
+
+        formatted: List[str] = []
         for f in self.memory.findings:
-            formatted.append(f"""
-[{f.severity.upper()}] {f.title}
-Tool: {f.tool}
-Target: {f.target}
-Description: {f.description[:200]}
-Evidence: {f.evidence[:200]}
-""")
-        
-        return "\n---\n".join(formatted) if formatted else "No findings"
+            # Validate any LLM-emitted CVSS vector against the recomputed
+            # base score. Mismatches mean the LLM hallucinated a number;
+            # we surface that so the prompt can ask the model to reconcile.
+            cvss_note = ""
+            if f.cvss_vector:
+                _, ok = validate_against_claimed(f.cvss_vector, f.cvss_score)
+                if not ok:
+                    cvss_note = (
+                        " [⚠️ CVSS vector does not match claimed score — "
+                        "recompute before publishing]"
+                    )
+            formatted.append(
+                f"\n[{f.severity.upper()}] {f.title}{cvss_note}\n"
+                f"Tool: {f.tool}\n"
+                f"Target: {f.target}\n"
+                f"CVSS: {f.cvss_vector or 'N/A'} (score: {f.cvss_score or 'N/A'})\n"
+                f"CWE: {f.cwe or 'N/A'}\n"
+                f"Description: {f.description[:4000]}\n"
+                f"Evidence: {f.evidence[:4000]}\n"
+            )
+        return "\n---\n".join(formatted)
     
     def _format_tool_executions(self) -> str:
         """Format tool executions for report"""
@@ -359,11 +380,25 @@ Evidence: {f.evidence[:200]}
         
         return "\n".join(formatted)
     
-    def _markdown_to_html(self, markdown: str) -> str:
-        """Simple markdown to HTML conversion"""
-        # Basic conversion - in production, use a proper library
-        html = markdown.replace('\n\n', '</p><p>')
-        html = f'<p>{html}</p>'
-        html = html.replace('**', '<strong>').replace('**', '</strong>')
-        html = html.replace('*', '<em>').replace('*', '</em>')
-        return html
+    def _markdown_to_html(self, markdown_text: str) -> str:
+        """Render Markdown to HTML using the ``markdown`` library.
+
+        Replaces the previous toy converter that broke on every finding
+        with multiple bold spans (``str.replace('**', '<strong>')`` then
+        ``str.replace('**', '</strong>')`` is a no-op on the second call —
+        all bold markers became opening tags). The library is a small
+        pure-Python dep with extension support.
+
+        Falls back to a minimal escape-only renderer if the ``markdown``
+        package is not installed (treats text as <pre>-formatted).
+        """
+        try:
+            import markdown as _md
+        except ImportError:
+            from html import escape
+
+            return f"<pre>{escape(markdown_text)}</pre>"
+        return _md.markdown(
+            markdown_text,
+            extensions=["extra", "tables", "fenced_code", "sane_lists"],
+        )
