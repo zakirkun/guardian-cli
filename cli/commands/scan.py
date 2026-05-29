@@ -8,7 +8,7 @@ from rich.console import Console
 from pathlib import Path
 
 from utils.helpers import load_config
-from tools import NmapTool
+from tools.nmap import NmapTool
 
 console = Console()
 

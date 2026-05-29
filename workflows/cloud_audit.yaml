@@ -1,0 +1,34 @@
+name: cloud_audit
+description: Multi-cloud security audit (AWS/Azure/GCP) — read-only API calls.
+version: 2
+
+steps:
+  - id: cloud_scan
+    type: tool
+    tool: scoutsuite
+    objective: "Comprehensive multi-cloud configuration audit"
+    parameters:
+      provider: aws
+
+  - id: aws_compliance
+    type: tool
+    tool: prowler
+    objective: "AWS CIS / NIST / PCI compliance scan"
+    depends_on: [cloud_scan]
+    parameters:
+      provider: aws
+      severity: ["critical", "high", "medium"]
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [cloud_scan, aws_compliance]
+    objective: "Correlate ScoutSuite + Prowler findings, dedupe overlap"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true

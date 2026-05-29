@@ -7,22 +7,23 @@ class ArjunTool(BaseTool):
     """Wrapper for Arjun - HTTP Parameter Discovery Tool"""
     
     def get_command(self, target: str, **kwargs) -> List[str]:
-        cmd = ["arjun", "-u", target, "--json"]
-        
-        # Add optional arguments
+        # arjun -u <target> -o <output.json> -q
+        # Note: arjun uses -o for JSON output file, NOT --json
+        self.output_file = f"arjun_{self._get_timestamp()}.json"
+        cmd = ["arjun", "-u", target, "-o", self.output_file, "-q"]
+
+        # HTTP method
         if kwargs.get("method"):
             cmd.extend(["-m", kwargs["method"]])
-            
+
+        # Threads
         if kwargs.get("threads"):
             cmd.extend(["-t", str(kwargs["threads"])])
-            
+
+        # Delay between requests
         if kwargs.get("delay"):
             cmd.extend(["--delay", str(kwargs["delay"])])
-            
-        # Output to a temporary JSON file
-        self.output_file = f"arjun_{self._get_timestamp()}.json"
-        cmd.extend(["-oJ", self.output_file])
-        
+
         return cmd
     
     def parse_output(self, output: str) -> Dict[str, Any]:

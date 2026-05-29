@@ -24,25 +24,21 @@ class WhatWebTool(BaseTool):
         # Priority: kwargs (workflow) > config > hardcoded defaults
         
         command = ["whatweb"]
-        
-        # JSON output for parsing
-        command.extend(["--log-json=-"])
-        
-        # Aggression level (1-4) - workflow parameter or config or default
+
+        # JSON output: pass as two separate args so subprocess splits correctly
+        command.extend(["--log-json", "-"])
+
+        # Aggression level (1-4)
         aggression = kwargs.get("aggression", config.get("aggression", 1))
         command.extend(["-a", str(aggression)])
-        
-        # Follow redirects - workflow parameter or config or default
+
+        # Follow redirects
         if kwargs.get("follow_redirects", config.get("follow_redirects", True)):
-            command.append("--follow-redirect=always")
-        
-        # User agent - workflow parameter or config or default
-        user_agent = kwargs.get("user_agent", config.get("user_agent", "Guardian-Pentest-Tool"))
-        command.extend(["--user-agent", user_agent])
-        
+            command.append("--follow-redirect")
+
         # Target
         command.append(target)
-        
+
         return command
     
     def parse_output(self, output: str) -> Dict[str, Any]:

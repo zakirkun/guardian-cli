@@ -5,11 +5,23 @@ import re
 
 class CMSeekTool(BaseTool):
     """Wrapper for CMSeek - CMS Detection and Exploitation Tool"""
-    
+
+    def __init__(self, config):
+        import shutil
+        # CMSeek can be 'cmseek', 'cmseek.py' or a python script
+        if shutil.which("cmseek"):
+            self._bin = "cmseek"
+        elif shutil.which("cmseek.py"):
+            self._bin = "cmseek.py"
+        else:
+            self._bin = "cmseek"   # will fail is_available gracefully
+        self.tool_name = self._bin
+        super().__init__(config)
+
     def get_command(self, target: str, **kwargs) -> List[str]:
         # python3 cmseek.py -u <target>
         # Assuming installed as 'cmseek' command or python script
-        cmd = ["cmseek", "-u", target]
+        cmd = [self._bin, "-u", target]
         
         if kwargs.get("batch"):
             cmd.append("--batch")

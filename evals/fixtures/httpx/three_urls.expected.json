@@ -1,0 +1,13 @@
+{
+  "urls": [
+    "https://example.com",
+    "https://example.com/admin",
+    "https://example.com/api"
+  ],
+  "technologies": ["Apache", "jQuery", "nginx"],
+  "status_codes": {
+    "https://example.com": 200,
+    "https://example.com/admin": 401,
+    "https://example.com/api": 200
+  }
+}

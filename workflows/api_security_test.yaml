@@ -1,0 +1,135 @@
+# API Security Testing Workflow
+# Focused assessment of REST and GraphQL APIs
+# Tools: httpx → arjun → ffuf (endpoint fuzzing) → nuclei (API templates) →
+#        sqlmap → nikto → xsstrike → correlation → report
+
+name: api_security_test
+description: >
+  API-focused penetration test for REST/GraphQL targets.
+  Discovers API endpoints, tests authentication, checks for injection
+  and over-exposure vulnerabilities.
+
+version: 1.0.0
+author: Guardian AI
+
+steps:
+
+  # ─── Phase 1: API Discovery ─────────────────────────────────────────────────
+
+  - name: http_probe
+    type: tool
+    tool: httpx
+    objective: "Identify live API endpoints, status codes, content types, and authentication headers"
+    parameters:
+      tech_detect: true
+      status_code: true
+      title: true
+      follow_redirects: true
+
+  - name: api_endpoint_fuzz
+    type: tool
+    tool: ffuf
+    objective: "Fuzz common API paths: /api/v1/, /api/v2/, /graphql, /swagger, /openapi.json, /docs"
+    parameters:
+      wordlist: "api_wordlist.txt"
+      match_codes: "200,201,204,301,302,401,403,405"
+      filter_codes: "404"
+      headers:
+        Content-Type: "application/json"
+        Accept: "application/json"
+
+  - name: parameter_discovery
+    type: tool
+    tool: arjun
+    objective: "Discover hidden GET, POST, and JSON body parameters on all API endpoints"
+    parameters:
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+
+  - name: waf_detection
+    type: tool
+    tool: wafw00f
+    objective: "Identify API gateway or WAF that may block testing and suggest evasion strategies"
+    parameters:
+      aggressive: true
+
+  # ─── Phase 2: SSL/TLS ───────────────────────────────────────────────────────
+
+  - name: ssl_analysis
+    type: tool
+    tool: testssl
+    objective: "Check TLS version support, cipher strength, and certificate validity for the API endpoint"
+    parameters:
+      severity: medium
+      json_output: true
+
+  # ─── Phase 3: API Vulnerability Testing ─────────────────────────────────────
+
+  - name: nuclei_api
+    type: tool
+    tool: nuclei
+    objective: "Run API-specific Nuclei templates: JWT weaknesses, GraphQL introspection, CORS misconfiguration, auth bypass"
+    parameters:
+      severity:
+        - critical
+        - high
+        - medium
+      tags: "api,jwt,graphql,cors,auth"
+
+  - name: nikto_api
+    type: tool
+    tool: nikto
+    objective: "Scan for common web and API security issues: method tampering, directory traversal, information disclosure"
+    parameters:
+      ssl: true
+      format: json
+
+  - name: sqli_api
+    type: tool
+    tool: sqlmap
+    objective: "Test API parameters for SQL injection via GET, POST, and JSON body (safe mode)"
+    parameters:
+      level: 2
+      risk: 1
+      batch: true
+      data: '{"id": "1"}'
+      headers:
+        Content-Type: "application/json"
+
+  - name: xss_reflected
+    type: tool
+    tool: xsstrike
+    objective: "Test API endpoints for reflected XSS in JSON responses and error messages"
+    parameters:
+      crawl: false
+      blind: false
+
+  # ─── Phase 4: Secret Exposure ────────────────────────────────────────────────
+
+  - name: secret_scan
+    type: tool
+    tool: gitleaks
+    objective: "Check for leaked API keys, tokens, or credentials in public-facing JavaScript or API responses"
+    parameters:
+      report_format: json
+
+  # ─── Phase 5: Analysis & Report ─────────────────────────────────────────────
+
+  - name: correlate_findings
+    type: analysis
+    agent: analyst
+    objective: "Correlate API findings, identify OWASP API Top 10 violations, build exploit chains"
+
+  - name: generate_report
+    type: report
+    agent: reporter
+    format: markdown
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true
+  save_intermediate: true
+  timeout: 3600

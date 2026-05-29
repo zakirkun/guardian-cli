@@ -1,0 +1,2 @@
+{"template-id":"CVE-2021-44228","info":{"name":"Apache Log4j RCE","severity":"critical","tags":["cve","rce","log4j"],"reference":["https://nvd.nist.gov/vuln/detail/CVE-2021-44228"]},"matched-at":"https://example.com/api","host":"example.com","ip":"93.184.216.34","timestamp":"2026-05-01T10:00:00Z"}
+{"template-id":"exposed-admin-panel","info":{"name":"Exposed Admin Panel","severity":"medium","tags":["panel","exposure"]},"matched-at":"https://example.com/admin","host":"example.com","timestamp":"2026-05-01T10:00:01Z"}

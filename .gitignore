@@ -60,3 +60,16 @@ guardian_state.json
 
 # Data shared tools
 .shared/nuclei/templates/*.yaml
+
+# Claude Code local state
+.claude/
+
+# Guardian KB / ranker / telemetry caches
+~/.guardian/
+.guardian/
+*.sqlite3
+ranker.pkl
+telemetry.jsonl
+
+# Screenshots emitted by playwright tool
+reports/screenshots/

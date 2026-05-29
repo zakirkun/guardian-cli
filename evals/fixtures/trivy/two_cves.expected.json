@@ -1,0 +1,9 @@
+{
+  "vulnerabilities": [
+    {"id": "CVE-2022-0001", "pkg": "libssl", "severity": "HIGH"},
+    {"id": "CVE-2022-0002", "pkg": "curl", "severity": "CRITICAL"}
+  ],
+  "by_severity": {"CRITICAL": 1, "HIGH": 1},
+  "artifact": "redis:6.2.7",
+  "scan_type": "container_image"
+}

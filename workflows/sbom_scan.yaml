@@ -1,0 +1,23 @@
+name: sbom_scan
+description: Generate SBOM with Syft, then CVE scan with Grype.
+version: 2
+
+steps:
+  - id: sbom
+    type: tool
+    tool: syft
+    objective: "Generate full SBOM (packages, versions, licenses)"
+    parameters:
+      format: syft-json
+
+  - id: cve_scan
+    type: tool
+    tool: grype
+    objective: "Scan SBOM for known CVEs"
+    depends_on: [sbom]
+    parameters:
+      only_fixed: false
+
+  - id: report
+    type: report
+    depends_on: [cve_scan]

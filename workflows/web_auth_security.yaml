@@ -1,0 +1,144 @@
+# Authentication & Session Security Workflow
+# Dedicated assessment of login, session management, and auth mechanisms.
+# Tools: httpx → wafw00f → ffuf (auth endpoints) → arjun (login params) →
+#        nuclei (auth templates) → sqlmap (login forms) → xsstrike →
+#        nikto → gitleaks → report
+
+name: web_auth_security
+description: >
+  Deep-dive authentication and session security assessment.
+  Covers login bypass, brute-force protection, session fixation,
+  JWT weaknesses, OAuth misconfigurations, password policies,
+  and credential exposure.
+
+version: 1.0.0
+author: Guardian AI
+
+steps:
+
+  # ─── Phase 1: Scope & Discovery ─────────────────────────────────────────────
+
+  - name: http_probe
+    type: tool
+    tool: httpx
+    objective: "Map all HTTP endpoints and identify authentication-related pages (login, register, reset, 2FA)"
+    parameters:
+      tech_detect: true
+      status_code: true
+      title: true
+      follow_redirects: true
+
+  - name: waf_detection
+    type: tool
+    tool: wafw00f
+    objective: "Detect WAF that may rate-limit auth testing payloads"
+    parameters:
+      aggressive: false
+
+  - name: ssl_check
+    type: tool
+    tool: testssl
+    objective: "Verify HTTPS enforcement; insecure auth over HTTP is a critical finding"
+    parameters:
+      severity: medium
+      json_output: true
+
+  # ─── Phase 2: Auth Endpoint Discovery ───────────────────────────────────────
+
+  - name: auth_endpoint_fuzz
+    type: tool
+    tool: ffuf
+    objective: "Enumerate auth-related endpoints: /login, /signin, /auth, /oauth, /sso, /api/token, /reset-password, /2fa"
+    parameters:
+      wordlist: "auth_paths.txt"
+      match_codes: "200,201,301,302,400,401,403,405,422,500"
+      filter_codes: "404"
+
+  - name: param_discovery
+    type: tool
+    tool: arjun
+    objective: "Discover hidden auth parameters: username, email, password, token, remember_me, next, redirect"
+    parameters:
+      methods:
+        - GET
+        - POST
+
+  - name: admin_discovery
+    type: tool
+    tool: gobuster
+    objective: "Find admin panels and hidden authentication interfaces not linked from the main site"
+    parameters:
+      mode: dir
+      wordlist: "admin_paths.txt"
+      extensions: ".php,.aspx,.jsp,.html"
+      status_codes: "200,301,302,401,403"
+
+  # ─── Phase 3: Auth Vulnerability Scanning ────────────────────────────────────
+
+  - name: nuclei_auth
+    type: tool
+    tool: nuclei
+    objective: "Auth-specific Nuclei templates: default creds, JWT none-alg, OAuth open-redirect, SAML bypass, broken auth CVEs"
+    parameters:
+      severity:
+        - critical
+        - high
+        - medium
+      tags: "auth,jwt,oauth,login,default-credentials,session"
+
+  - name: nikto_auth
+    type: tool
+    tool: nikto
+    objective: "Check for insecure auth headers, missing HSTS, missing cookie flags (Secure, HttpOnly, SameSite)"
+    parameters:
+      ssl: true
+      format: json
+      tuning: "1,2,4,7"
+
+  # ─── Phase 4: Injection on Auth Inputs ──────────────────────────────────────
+
+  - name: sqli_login
+    type: tool
+    tool: sqlmap
+    objective: "Test username and password fields for SQL injection auth bypass (admin'--)"
+    parameters:
+      level: 3
+      risk: 2
+      batch: true
+      forms: true
+      technique: "BEUST"    # All SQLi techniques inc. Boolean-based, Error-based, UNION, Stacked, Time-based
+
+  - name: xss_auth_forms
+    type: tool
+    tool: xsstrike
+    objective: "Test auth forms for XSS that could be used for credential theft or session hijacking"
+    parameters:
+      crawl: false
+      blind: true
+
+  # ─── Phase 5: Credential & Secret Exposure ───────────────────────────────────
+
+  - name: secret_scan
+    type: tool
+    tool: gitleaks
+    objective: "Detect hardcoded credentials, JWT secrets, OAuth client secrets, or API keys"
+    parameters:
+      report_format: json
+
+  # ─── Phase 6: Analysis & Report ─────────────────────────────────────────────
+
+  - name: correlate_findings
+    type: analysis
+    agent: analyst
+    objective: "Correlate auth findings, map to OWASP A07 (Auth Failures), identify complete auth-bypass chains"
+
+  - name: generate_report
+    type: report
+    agent: reporter
+    format: markdown
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true
+  save_intermediate: true
+  timeout: 3600

@@ -1,0 +1,38 @@
+name: mobile_android
+description: Android mobile assessment — static (MobSF + apkleaks) + runtime (objection).
+version: 2
+
+steps:
+  - id: static_scan
+    type: tool
+    tool: mobsf
+    objective: "Full static analysis: permissions, code-level findings, OWASP MASVS"
+    parameters:
+      action: scan_report
+
+  - id: secrets
+    type: tool
+    tool: apkleaks
+    objective: "Extract hardcoded URIs, API keys, JWT secrets from APK"
+
+  - id: runtime
+    type: tool
+    tool: objection
+    objective: "SSL-pinning + root-detection bypass; keystore + permissions dump"
+    depends_on: [static_scan]
+    parameters:
+      action: ssl_pin
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [static_scan, secrets, runtime]
+    objective: "Map mobile findings to OWASP MASVS / Mobile Top 10"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true

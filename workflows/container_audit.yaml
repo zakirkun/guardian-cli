@@ -1,0 +1,40 @@
+name: container_audit
+description: Container image + Kubernetes CIS audit pipeline.
+version: 2
+
+steps:
+  - id: image_cve
+    type: tool
+    tool: trivy
+    objective: "Scan container image for CVEs and misconfigurations"
+    parameters:
+      scan_type: image
+      severity: "CRITICAL,HIGH,MEDIUM"
+      ignore_unfixed: false
+
+  - id: iac_scan
+    type: tool
+    tool: trivy
+    objective: "Scan IaC (Dockerfile, k8s manifests, terraform) for misconfig"
+    parameters:
+      scan_type: config
+      severity: "CRITICAL,HIGH"
+
+  - id: cluster_cis
+    type: tool
+    tool: kube-bench
+    objective: "CIS Kubernetes Benchmark on the running cluster"
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [image_cve, iac_scan, cluster_cis]
+    objective: "Build attack chain across image CVEs, IaC drift, and cluster RBAC"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 3
+  require_confirmation: false

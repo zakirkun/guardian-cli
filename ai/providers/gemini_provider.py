@@ -127,10 +127,48 @@ class GeminiProvider(BaseProvider):
             self.logger.error(f"Gemini sync generation failed: {e}")
             raise
     
+    async def generate_with_usage(
+        self,
+        prompt: str,
+        system_prompt: str,
+        context: Optional[list] = None,
+    ) -> dict:
+        """Generate response and return full token usage metadata."""
+        await self._apply_rate_limit()
+
+        try:
+            messages = []
+            if system_prompt:
+                messages.append(SystemMessage(content=system_prompt))
+            messages.extend(self._format_context(context))
+            messages.append(HumanMessage(content=prompt))
+
+            response = await self.backend.ainvoke(messages)
+
+            # LangChain-google-genai exposes usage_metadata on the response object
+            usage = getattr(response, "usage_metadata", {}) or {}
+            prompt_tokens     = usage.get("prompt_token_count", usage.get("input_tokens", 0))
+            completion_tokens = usage.get("candidates_token_count", usage.get("output_tokens", 0))
+            total_tokens      = usage.get("total_token_count", prompt_tokens + completion_tokens)
+
+            return {
+                "response":           response.content,
+                "reasoning":          "",
+                "prompt_tokens":      prompt_tokens,
+                "completion_tokens":  completion_tokens,
+                "total_tokens":       total_tokens,
+                "cost_usd":           self._estimate_cost(prompt_tokens, completion_tokens),
+                "model":              self.model_name,
+                "provider":           "gemini",
+            }
+        except Exception as e:
+            self.logger.error(f"Gemini generate_with_usage failed: {e}")
+            raise
+
     def get_model_name(self) -> str:
         """Get current model name"""
         return self.model_name
-    
+
     def is_available(self) -> bool:
         """Check if provider is available"""
         return LANGCHAIN_AVAILABLE and bool(self.api_key) and self.backend is not None

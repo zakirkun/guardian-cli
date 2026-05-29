@@ -1,0 +1,91 @@
+# Web Application Quick Scan Workflow
+# Fast, lightweight assessment for time-limited engagements or CI/CD gates.
+# Target time: ~15-20 minutes
+# Tools: httpx → wafw00f → nuclei (critical/high only) → nikto → report
+
+name: web_quick_scan
+description: >
+  Rapid web security assessment for CI/CD pipelines or quick client checks.
+  High-signal tools only, optimised for speed without sacrificing coverage
+  of the most exploitable vulnerability classes.
+
+version: 1.0.0
+author: Guardian AI
+
+steps:
+
+  # ─── Phase 1: Rapid Fingerprinting ──────────────────────────────────────────
+
+  - name: http_probe
+    type: tool
+    tool: httpx
+    objective: "Fast HTTP probe: live status, redirect chain, technology stack, and security headers"
+    parameters:
+      tech_detect: true
+      status_code: true
+      title: true
+      follow_redirects: true
+      threads: 100
+
+  - name: waf_check
+    type: tool
+    tool: wafw00f
+    objective: "Quickly detect if a WAF is present (affects which payloads to use)"
+    parameters:
+      aggressive: false
+
+  - name: tech_fingerprint
+    type: tool
+    tool: whatweb
+    objective: "Identify CMS, server, and framework versions for targeted vuln lookup"
+    parameters:
+      aggression: 1
+
+  # ─── Phase 2: High-Signal Vulnerability Scan ────────────────────────────────
+
+  - name: nuclei_critical
+    type: tool
+    tool: nuclei
+    objective: "Fast scan: critical and high severity templates only (CVEs, auth bypass, RCE, SSRF)"
+    parameters:
+      severity:
+        - critical
+        - high
+      rate_limit: 300
+
+  - name: nikto_quick
+    type: tool
+    tool: nikto
+    objective: "Quick web misconfiguration check: default files, dangerous HTTP methods, headers"
+    parameters:
+      ssl: true
+      format: json
+      tuning: "1,2,3,6,7"   # Only most critical Nikto test categories
+
+  # ─── Phase 3: Top Injection Classes ─────────────────────────────────────────
+
+  - name: xss_fast
+    type: tool
+    tool: xsstrike
+    objective: "Quick XSS pass on main endpoints without deep crawl"
+    parameters:
+      crawl: false
+      blind: false
+
+  # ─── Phase 4: Analysis & Report ─────────────────────────────────────────────
+
+  - name: analyze_findings
+    type: analysis
+    agent: analyst
+    objective: "Extract and rank all findings, filter false positives, assign CVSS scores"
+
+  - name: quick_report
+    type: report
+    agent: reporter
+    format: markdown
+
+settings:
+  max_parallel_tools: 4
+  require_confirmation: false    # non-interactive for CI/CD
+  save_intermediate: false
+  timeout: 1200                  # 20 minute hard cap

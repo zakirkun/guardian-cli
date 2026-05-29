@@ -1,0 +1,5 @@
+{
+  "subdomains": ["api.example.com", "admin.example.com", "www.example.com"],
+  "count": 3,
+  "sources": {"crtsh": 2, "hackertarget": 1}
+}

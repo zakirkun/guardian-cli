@@ -1,0 +1,42 @@
+name: llm_redteam
+description: LLM red-team — garak probes + PyRIT multi-turn + native prompt fuzz.
+version: 2
+
+steps:
+  - id: garak_scan
+    type: tool
+    tool: garak
+    objective: "Run all probe categories against the target LLM"
+    parameters:
+      probes: "all"
+      model_type: openai
+
+  - id: native_probe
+    type: tool
+    tool: prompt_fuzz
+    objective: "Send curated injection payloads, detect leakage markers"
+    parameters:
+      method: POST
+
+  - id: multi_turn
+    type: tool
+    tool: pyrit
+    objective: "Multi-turn jailbreak + prompt-leak attack"
+    depends_on: [native_probe]
+    parameters:
+      scenario: jailbreak
+      max_turns: 5
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [garak_scan, multi_turn]
+    objective: "Map LLM weaknesses to OWASP LLM Top 10"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 2
+  require_confirmation: true

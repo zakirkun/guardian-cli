@@ -1,0 +1,39 @@
+name: osint
+description: Passive OSINT — emails, hosts, infra metadata via public sources.
+version: 2
+
+steps:
+  - id: harvester
+    type: tool
+    tool: theharvester
+    objective: "Collect emails, hostnames, IPs from public sources"
+    parameters:
+      sources: "crtsh,hackertarget,duckduckgo,otx,bing"
+      limit: 500
+
+  - id: subs
+    type: tool
+    tool: subfinder
+    objective: "Passive subdomain enumeration (CT logs, OSINT APIs)"
+
+  - id: shodan_lookup
+    type: tool
+    tool: shodan
+    depends_on: [harvester]
+    objective: "Shodan host lookup for any IPs surfaced by theHarvester"
+    parameters:
+      mode: search
+
+  - id: correlate
+    type: analysis
+    agent: analyst
+    depends_on: [harvester, subs, shodan_lookup]
+    objective: "Build asset inventory + email-employee mapping for engagement"
+
+  - id: report
+    type: report
+    depends_on: [correlate]
+
+settings:
+  max_parallel_tools: 3
+  require_confirmation: false

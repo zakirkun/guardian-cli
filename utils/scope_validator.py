@@ -5,11 +5,29 @@ Ensures all scanning is within authorized boundaries
 
 import ipaddress
 import re
+import socket
 from typing import List, Set, Optional
 from pathlib import Path
 from urllib.parse import urlparse
 
 from utils.logger import get_logger
+
+
+# Default blacklist applied even when config omits CIDRs.
+# Covers IPv4 + IPv6 loopback, link-local, private (RFC1918), unique-local (ULA),
+# carrier-grade NAT, and metadata services (AWS/GCP/Azure 169.254.169.254).
+_HARDCODED_BLACKLIST_CIDRS = [
+    "127.0.0.0/8",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.0.0/16",
+    "100.64.0.0/10",
+    "0.0.0.0/8",
+    "::1/128",
+    "fc00::/7",
+    "fe80::/10",
+]
 
 
 class ScopeValidator:
@@ -19,13 +37,19 @@ class ScopeValidator:
         self.config = config
         self.logger = get_logger()
         
-        # Load blacklisted IP ranges
-        self.blacklist_networks = []
-        for cidr in config.get("scope", {}).get("blacklist", []):
+        # Load blacklisted IP ranges (config + hardcoded defaults — defense in depth).
+        self.blacklist_networks: List[ipaddress._BaseNetwork] = []
+        configured = list(config.get("scope", {}).get("blacklist", []))
+        for cidr in configured + _HARDCODED_BLACKLIST_CIDRS:
             try:
-                self.blacklist_networks.append(ipaddress.ip_network(cidr))
+                net = ipaddress.ip_network(cidr, strict=False)
+                if net not in self.blacklist_networks:
+                    self.blacklist_networks.append(net)
             except ValueError as e:
                 self.logger.warning(f"Invalid blacklist CIDR: {cidr} - {e}")
+
+        # Cache hostname -> resolved IPs (avoid repeat DNS during validation loops).
+        self._dns_cache: dict[str, List[str]] = {}
         
         # Load authorized scope (if provided)
         self.authorized_domains: Set[str] = set()
@@ -91,20 +115,71 @@ class ScopeValidator:
         return True, None
     
     def _is_blacklisted(self, host: str) -> bool:
-        """Check if host is in blacklist"""
+        """Check if host (IP or hostname) resolves to any blacklisted range.
+
+        For hostnames, resolves via DNS (all returned addresses) so a domain
+        pointing at an internal IP cannot bypass the blacklist. Resolution
+        failures are treated as blacklisted (fail-closed) — better to refuse
+        an unresolvable target than to scan something we cannot vet.
+        """
+        host_lower = host.lower().strip()
+
+        # Always block literal localhost/loopback aliases that are not valid IPs.
+        if host_lower in ("localhost", "ip6-localhost", "ip6-loopback"):
+            return True
+
+        # Try as literal IP first.
         try:
-            # Try to parse as IP
             ip = ipaddress.ip_address(host)
             for network in self.blacklist_networks:
-                if ip in network:
+                if ip.version == network.version and ip in network:
                     return True
+            return False
         except ValueError:
-            # Not an IP, check domain patterns
-            # Blacklist localhost variations
-            if host.lower() in ['localhost', '127.0.0.1', '::1']:
-                return True
-        
+            pass  # Fall through to DNS resolution.
+
+        # Resolve hostname → IPs and check each against blacklist.
+        ips = self._resolve(host_lower)
+        if ips is None:
+            self.logger.log_security_event(
+                "SCOPE_VIOLATION",
+                "HIGH",
+                f"DNS resolution failed for {host} — refusing (fail-closed)",
+            )
+            return True
+
+        for ip_str in ips:
+            try:
+                ip = ipaddress.ip_address(ip_str)
+            except ValueError:
+                continue
+            for network in self.blacklist_networks:
+                if ip.version == network.version and ip in network:
+                    self.logger.log_security_event(
+                        "SCOPE_VIOLATION",
+                        "CRITICAL",
+                        f"Hostname {host} resolved to {ip_str} (in {network})",
+                    )
+                    return True
         return False
+
+    def _resolve(self, host: str) -> Optional[List[str]]:
+        """Resolve hostname to list of IPv4/IPv6 strings. None on failure."""
+        if host in self._dns_cache:
+            return self._dns_cache[host]
+        try:
+            infos = socket.getaddrinfo(
+                host,
+                None,
+                proto=socket.IPPROTO_TCP,
+            )
+        except (socket.gaierror, socket.herror, UnicodeError) as e:
+            self.logger.warning(f"DNS resolution failed for {host}: {e}")
+            self._dns_cache[host] = []
+            return None
+        ips = sorted({info[4][0] for info in infos})
+        self._dns_cache[host] = ips
+        return ips
     
     def _is_authorized(self, host: str) -> bool:
         """Check if host is in authorized scope"""

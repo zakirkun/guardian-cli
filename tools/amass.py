@@ -28,8 +28,8 @@ class AmassTool(BaseTool):
         # Domain
         command.extend(["-d", target])
         
-        # JSON output for parsing
-        command.extend(["-json", "-"])  # Output to stdout
+        # JSON lines output
+        command.append("-json")
         
         # Active vs Passive mode
         mode = config.get("mode", "passive")

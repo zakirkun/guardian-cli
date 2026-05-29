@@ -1,0 +1,173 @@
+# Web Application Full Assessment Workflow
+# Comprehensive web app security test using all web-oriented tools.
+# Covers: discovery → tech fingerprinting → WAF detection → SSL/TLS →
+#         directory/param fuzzing → vuln scanning → injection testing →
+#         XSS detection → CMS checks → secrets → correlation → report
+
+name: web_full_assessment
+description: >
+  Full-coverage web application penetration test.
+  Runs every web-relevant tool in the arsenal in a logical attack order:
+  fingerprinting → surface mapping → content discovery →
+  vulnerability scanning → exploitation-class checks → report.
+
+version: 2.0.0
+author: Guardian AI
+
+steps:
+
+  # ─── Phase 1: Fingerprinting & Discovery ───────────────────────────────────
+
+  - name: http_probe
+    type: tool
+    tool: httpx
+    objective: "Probe target for live HTTP/S services, technology stack, status codes, titles, and redirect chains"
+    parameters:
+      tech_detect: true
+      status_code: true
+      title: true
+      follow_redirects: true
+      threads: 50
+
+  - name: waf_detection
+    type: tool
+    tool: wafw00f
+    objective: "Detect and fingerprint any Web Application Firewall protecting the target"
+    parameters:
+      aggressive: true
+
+  - name: technology_fingerprint
+    type: tool
+    tool: whatweb
+    objective: "Detailed technology fingerprinting: CMS, frameworks, libraries, server versions"
+    parameters:
+      aggression: 3
+      log_json: true
+
+  - name: cms_detection
+    type: tool
+    tool: cmseek
+    objective: "Detect the CMS in use and enumerate known vulnerabilities for it"
+    parameters:
+      follow_redirect: true
+
+  # ─── Phase 2: SSL/TLS Analysis ─────────────────────────────────────────────
+
+  - name: ssl_tls_deep
+    type: tool
+    tool: testssl
+    objective: "Analyse SSL/TLS cipher suites, protocol versions, certificate chain, and known vulnerabilities (BEAST, POODLE, Heartbleed)"
+    parameters:
+      severity: medium
+      json_output: true
+
+  - name: ssl_advanced
+    type: tool
+    tool: sslyze
+    objective: "Advanced SSL/TLS configuration analysis and certificate pinning validation"
+    parameters:
+      json_out: true
+
+  # ─── Phase 3: Content & Parameter Discovery ─────────────────────────────────
+
+  - name: directory_bruteforce
+    type: tool
+    tool: gobuster
+    objective: "Enumerate hidden directories and files using a common wordlist"
+    parameters:
+      mode: dir
+      extensions: ".php,.html,.js,.json,.bak,.txt,.xml,.env,.config"
+      wordlist: "common.txt"
+      status_codes: "200,201,204,301,302,307,401,403,405,500"
+
+  - name: advanced_fuzzing
+    type: tool
+    tool: ffuf
+    objective: "Advanced multi-mode fuzzing: file paths, virtual hosts, and backup files"
+    parameters:
+      extensions: ".php,.bak,.old,.zip,.tar.gz"
+      match_codes: "200,204,301,302,307,401,403"
+      filter_codes: "404"
+      threads: 40
+
+  - name: parameter_discovery
+    type: tool
+    tool: arjun
+    objective: "Discover hidden HTTP GET, POST, JSON, and XML parameters on all identified endpoints"
+    parameters:
+      methods:
+        - GET
+        - POST
+
+  # ─── Phase 4: Vulnerability Scanning ────────────────────────────────────────
+
+  - name: nuclei_scan
+    type: tool
+    tool: nuclei
+    objective: "Template-based vulnerability scan covering CVEs, misconfigs, exposures, and default credentials"
+    parameters:
+      severity:
+        - critical
+        - high
+        - medium
+      rate_limit: 150
+
+  - name: nikto_scan
+    type: tool
+    tool: nikto
+    objective: "Comprehensive web vulnerability scan: misconfigurations, dangerous files, outdated software"
+    parameters:
+      ssl: true
+      format: json
+
+  # ─── Phase 5: Injection Testing ─────────────────────────────────────────────
+
+  - name: sqli_check
+    type: tool
+    tool: sqlmap
+    objective: "Detect SQL injection vulnerabilities on all discovered parameters (safe-mode, level 1)"
+    parameters:
+      level: 1
+      risk: 1
+      batch: true
+      forms: true
+
+  - name: xss_detection
+    type: tool
+    tool: xsstrike
+    objective: "Advanced XSS detection with DOM analysis, reflected, and stored XSS checks"
+    parameters:
+      crawl: true
+      blind: true
+
+  # ─── Phase 6: Secret & Credential Exposure ──────────────────────────────────
+
+  - name: secret_scan
+    type: tool
+    tool: gitleaks
+    objective: "Scan for secrets, API keys, tokens, and credentials exposed in source code or git history"
+    parameters:
+      report_format: json
+
+  # ─── Phase 7: Analysis & Reporting ──────────────────────────────────────────
+
+  - name: correlate_all_findings
+    type: analysis
+    agent: analyst
+    objective: "Correlate findings from all 13 tools, deduplicate, build attack chains, assign CVSS scores"
+
+  - name: false_positive_filter
+    type: analysis
+    agent: analyst
+    objective: "Evaluate each finding for false-positive probability and filter low-confidence results"
+
+  - name: generate_full_report
+    type: report
+    agent: reporter
+    format: markdown
+
+settings:
+  max_parallel_tools: 3
+  require_confirmation: true
+  save_intermediate: true
+  timeout: 7200   # 2 hours for a full assessment
