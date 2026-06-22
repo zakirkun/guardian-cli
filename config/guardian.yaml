@@ -3,7 +3,7 @@
 
 # AI Configuration
 ai:
-  # Active Provider: gemini, openai, claude, openrouter
+  # Active Provider: gemini, openai, claude, openrouter, requesty
   provider: openai
   
   # Gemini Configuration
@@ -25,6 +25,11 @@ ai:
   openrouter:
     model: anthropic/claude-3.5-sonnet
     api_key: null  # Or set OPENROUTER_API_KEY environment variable
+  
+  # Requesty Configuration
+  requesty:
+    model: openai/gpt-4o-mini
+    api_key: null  # Or set REQUESTY_API_KEY environment variable
   
   # General AI Settings (applied to all providers)
   temperature: 0.2
@@ -52,6 +57,8 @@ ai:
     # OpenRouter (model names as returned by the API)
     anthropic/claude-3.5-sonnet: { prompt: 3.00, completion: 15.00 }
     openai/gpt-4o:               { prompt: 5.00, completion: 15.00 }
+    # Requesty (provider/model naming, OpenAI-compatible)
+    openai/gpt-4o-mini:          { prompt: 0.15, completion: 0.60  }
 
 
 # Penetration Testing Settings

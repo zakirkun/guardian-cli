@@ -55,7 +55,7 @@ def recon_command(
         None,
         "--provider",
         "-p",
-        help="Override AI provider (gemini, openai, claude, openrouter)"
+        help="Override AI provider (gemini, openai, claude, openrouter, requesty)"
     )
 ):
     """
@@ -95,7 +95,7 @@ def recon_command(
 
     # Override provider if provided
     if provider:
-        valid_providers = ["gemini", "openai", "claude", "openrouter"]
+        valid_providers = ["gemini", "openai", "claude", "openrouter", "requesty"]
         if provider not in valid_providers:
             console.print(f"[bold red]Error:[/bold red] Invalid provider '{provider}'. Must be one of: {', '.join(valid_providers)}")
             raise typer.Exit(1)

@@ -22,6 +22,7 @@ PROVIDERS: Dict[str, str] = {
     "openai": "ai.providers.openai_provider.OpenAIProvider",
     "claude": "ai.providers.claude_provider.ClaudeProvider",
     "openrouter": "ai.providers.openrouter_provider.OpenRouterProvider",
+    "requesty": "ai.providers.requesty_provider.RequestyProvider",
     # New in v4: shipped in-tree but follow the plugin contract.
     "ollama": "ai.providers.ollama_provider.OllamaProvider",
     "openai_compatible": "ai.providers.openai_compatible_provider.OpenAICompatibleProvider",

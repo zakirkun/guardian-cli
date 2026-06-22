@@ -10,7 +10,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-**Guardian** is an enterprise-grade AI-powered penetration testing automation framework that combines multiple AI providers (OpenAI GPT-4, Claude, Google Gemini, OpenRouter) with battle-tested security tools to deliver intelligent, adaptive security assessments with comprehensive evidence capture.
+**Guardian** is an enterprise-grade AI-powered penetration testing automation framework that combines multiple AI providers (OpenAI GPT-4, Claude, Google Gemini, OpenRouter, Requesty) with battle-tested security tools to deliver intelligent, adaptive security assessments with comprehensive evidence capture.
 
 [Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
@@ -35,7 +35,7 @@
 
 ### 🤖 Multi-Provider AI Intelligence
 
-- **6 AI Providers Supported**: OpenAI (GPT-4o), Anthropic (Claude), Google (Gemini), OpenRouter, **Ollama (local)**, **OpenAI-compatible (vLLM, LM Studio, Together, Groq)**
+- **7 AI Providers Supported**: OpenAI (GPT-4o), Anthropic (Claude), Google (Gemini), OpenRouter, **Requesty**, **Ollama (local)**, **OpenAI-compatible (vLLM, LM Studio, Together, Groq)**
 - **Plugin Provider Contract**: Third-party providers ship via `[project.entry-points."guardian.providers"]` — no fork required
 - **Multi-Agent Architecture**: Specialized AI agents (Planner, Tool Selector, Analyst, Reporter) plus debate triage roles (Red Advocate, Blue Advocate, Judge) and Visual Triage
 - **Multi-Agent Debate Triage**: Three-role red/blue/judge debate on ambiguous findings — F1 ≥ single-agent baseline +5pp
@@ -130,6 +130,7 @@
   - Anthropic API Key ([Get it here](https://console.anthropic.com/))
   - Google AI Studio API Key ([Get it here](https://makersuite.google.com/app/apikey))
   - OpenRouter API Key ([Get it here](https://openrouter.ai/keys))
+  - Requesty API Key ([Get it here](https://app.requesty.ai/api-keys))
 - **Git** (for cloning repository)
 
 ### Optional Tools (for full functionality)
@@ -195,7 +196,7 @@ Guardian supports multiple AI providers. Configure your preferred provider in `c
 ```yaml
 # config/guardian.yaml
 ai:
-  # Choose your provider: openai, claude, gemini, or openrouter
+  # Choose your provider: openai, claude, gemini, openrouter, or requesty
   provider: openai
   
   # OpenAI Configuration (recommended)
@@ -217,6 +218,11 @@ ai:
   openrouter:
     model: anthropic/claude-3.5-sonnet
     api_key: null  # Or set OPENROUTER_API_KEY env var
+
+  # Requesty Configuration (OpenAI-compatible gateway)
+  requesty:
+    model: openai/gpt-4o-mini
+    api_key: null  # Or set REQUESTY_API_KEY env var
 ```
 
 **Or use environment variables:**
@@ -227,6 +233,7 @@ export OPENAI_API_KEY="sk-your-key-here"
 export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 export GOOGLE_API_KEY="your-gemini-key"
 export OPENROUTER_API_KEY="your-router-key"
+export REQUESTY_API_KEY="your-requesty-key"
 
 # Windows PowerShell
 $env:OPENAI_API_KEY="sk-your-key-here"
@@ -395,7 +402,7 @@ Edit `config/guardian.yaml` to customize Guardian's behavior:
 ```yaml
 # AI Configuration
 ai:
-  provider: openai  # openai, claude, gemini, openrouter
+  provider: openai  # openai, claude, gemini, openrouter, requesty
   
   openai:
     model: gpt-4o
@@ -512,7 +519,8 @@ steps:
 Guardian Architecture:
 ┌─────────────────────────────────────────┐
 │         AI Provider Layer               │
-│  (OpenAI, Claude, Gemini, OpenRouter)   │
+│  (OpenAI, Claude, Gemini, OpenRouter,   │
+│   Requesty)                             │
 └─────────────────────────────────────────┘
                  │
 ┌─────────────────────────────────────────┐
@@ -546,7 +554,8 @@ guardian-cli/
 │       ├── openai_provider.py
 │       ├── claude_provider.py
 │       ├── gemini_provider.py
-│       └── openrouter_provider.py
+│       ├── openrouter_provider.py
+│       └── requesty_provider.py
 ├── cli/                   # Command-line interface
 │   └── commands/         # CLI commands (init, scan, recon, etc.)
 ├── core/                  # Core agent system
@@ -629,7 +638,7 @@ guardian-cli/
 
 ### Version 2.0.0
 
-- Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter)
+- Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter, Requesty)
 - Evidence linking via `execution_id`
 - Workflow parameter priority system
 
@@ -672,7 +681,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ## 📊 Roadmap
 
 **Shipped in v4.0.0:**
-- [x] Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter, Ollama, OpenAI-compatible)
+- [x] Multi-provider AI (OpenAI, Claude, Gemini, OpenRouter, Requesty, Ollama, OpenAI-compatible)
 - [x] Plugin entry-point contract for providers AND tools
 - [x] RAG knowledge base (CVE/CWE/MITRE)
 - [x] Multi-agent debate triage (red/blue/judge)
