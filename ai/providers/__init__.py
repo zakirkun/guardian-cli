@@ -6,7 +6,6 @@ Provider factory and registry for different AI providers
 from typing import Dict, Any, Optional
 from utils.logger import get_logger
 
-
 # In-tree provider registry. Maps name → "module.path.ClassName".
 # Third parties extend this WITHOUT editing the dict by declaring an
 # entry-point in their own pyproject.toml:
@@ -26,6 +25,7 @@ PROVIDERS: Dict[str, str] = {
     # New in v4: shipped in-tree but follow the plugin contract.
     "ollama": "ai.providers.ollama_provider.OllamaProvider",
     "openai_compatible": "ai.providers.openai_compatible_provider.OpenAICompatibleProvider",
+    "litellm": "ai.providers.litellm_provider.LiteLLMProvider",
 }
 
 _ENTRY_POINT_GROUP = "guardian.providers"
@@ -96,16 +96,14 @@ def get_provider(config: Dict[str, Any]):
 
     if provider_name not in registry:
         available = ", ".join(sorted(registry.keys()))
-        raise ValueError(
-            f"Unknown provider: {provider_name}. "
-            f"Available providers: {available}"
-        )
+        raise ValueError(f"Unknown provider: {provider_name}. " f"Available providers: {available}")
 
     provider_path = registry[provider_name]
     module_path, class_name = provider_path.rsplit(".", 1)
 
     try:
         import importlib
+
         module = importlib.import_module(module_path)
         provider_class = getattr(module, class_name)
         provider = provider_class(config, logger)

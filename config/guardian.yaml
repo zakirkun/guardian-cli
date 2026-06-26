@@ -3,7 +3,7 @@
 
 # AI Configuration
 ai:
-  # Active Provider: gemini, openai, claude, openrouter, requesty
+  # Active Provider: gemini, openai, claude, openrouter, requesty, litellm
   provider: openai
   
   # Gemini Configuration
@@ -30,6 +30,13 @@ ai:
   requesty:
     model: openai/gpt-4o-mini
     api_key: null  # Or set REQUESTY_API_KEY environment variable
+
+  # LiteLLM Configuration (100+ providers via unified interface)
+  litellm:
+    model: openai/gpt-4o  # Provider-prefixed model name
+    api_key: null  # Or set provider-specific env vars (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+    api_base: null  # Optional: LiteLLM proxy URL
+    drop_params: true  # Silently drop unsupported params per provider
   
   # General AI Settings (applied to all providers)
   temperature: 0.2
