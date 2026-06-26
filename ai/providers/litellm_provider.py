@@ -124,6 +124,8 @@ class LiteLLMProvider(BaseProvider):
             return await litellm.acompletion(messages=messages, **self._base_kwargs())
 
         response = await self._with_retry(_call, self._is_retriable)
+        if not response.choices:
+            raise ValueError("LiteLLM returned empty choices list")
         return str(response.choices[0].message.content or "")
 
     def generate_sync(
@@ -136,8 +138,23 @@ class LiteLLMProvider(BaseProvider):
         import litellm
 
         messages = self._build_messages(prompt, system_prompt, context)
-        response = litellm.completion(messages=messages, **self._base_kwargs())
-        return str(response.choices[0].message.content or "")
+        kwargs = self._base_kwargs()
+
+        last_err = None
+        for attempt in range(max(getattr(self, "_retry_attempts", 2), 1)):
+            try:
+                response = litellm.completion(messages=messages, **kwargs)
+                if not response.choices:
+                    raise ValueError("LiteLLM returned empty choices list")
+                return str(response.choices[0].message.content or "")
+            except Exception as e:
+                last_err = e
+                if not self._is_retriable(e) or attempt >= self._retry_attempts - 1:
+                    raise
+                import time
+
+                time.sleep(min(2**attempt, 30))
+        raise last_err
 
     async def generate_with_usage(
         self,
@@ -154,6 +171,8 @@ class LiteLLMProvider(BaseProvider):
             return await litellm.acompletion(messages=messages, **self._base_kwargs())
 
         response = await self._with_retry(_call, self._is_retriable)
+        if not response.choices:
+            raise ValueError("LiteLLM returned empty choices list")
 
         usage = getattr(response, "usage", None) or {}
         prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
@@ -188,6 +207,7 @@ class LiteLLMProvider(BaseProvider):
             "litellm.exceptions.Timeout",
             "litellm.exceptions.InternalServerError",
             "litellm.exceptions.ServiceUnavailableError",
+            "litellm.exceptions.BadGatewayError",
         }:
             return True
         return BaseProvider.default_is_retriable(exc)
