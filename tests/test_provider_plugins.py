@@ -12,7 +12,7 @@ class TestEntryPointDiscovery:
         from ai.providers import list_available_providers
 
         names = list_available_providers()
-        for required in ("gemini", "openai", "claude", "openrouter", "ollama", "openai_compatible"):
+        for required in ("gemini", "openai", "claude", "openrouter", "requesty", "ollama", "openai_compatible"):
             assert required in names, f"missing {required}"
 
     def test_unknown_provider_rejected(self) -> None:
