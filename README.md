@@ -781,9 +781,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <a href="https://github.com/zakirkun/guardian-cli/stargazers">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zakirkun/guardian-cli&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zakirkun/guardian-cli&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zakirkun/guardian-cli&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=zakirkun/guardian-cli&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=zakirkun/guardian-cli&type=Date" />
+    <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=zakirkun/guardian-cli&type=Date" />
   </picture>
 </a>
 
